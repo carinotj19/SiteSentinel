@@ -1,0 +1,3 @@
+Single-database Alembic migration environment for Flask-Migrate.
+Run `flask --app sitesentinel db upgrade` before starting the server.
+Create subsequent migrations with `flask --app sitesentinel db migrate -m "description"`.

@@ -1,13 +1,16 @@
 """Owner-scoped monitor CRUD and synchronous development-time checks."""
 
+from datetime import datetime, timezone
+
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy.exc import IntegrityError
 
 from sitesentinel.api.common import error_response, json_object
 from sitesentinel.extensions import db
-from sitesentinel.models import CheckResult, Monitor
+from sitesentinel.models import AlertEvent, CheckResult, Incident, Monitor
 from sitesentinel.monitoring.scanner import UnsafeTarget, normalize_url, scan_url
+from sitesentinel.monitoring.service import record_scan
 
 bp = Blueprint("monitors", __name__, url_prefix="/api/v1/monitors")
 
@@ -23,6 +26,14 @@ def _bad_fields(payload: dict, allowed: set[str]) -> bool:
 
 
 def _apply_fields(monitor: Monitor, payload: dict):
+    now = datetime.now(timezone.utc)
+    if "interval_seconds" in payload:
+        interval = payload["interval_seconds"]
+        if isinstance(interval, bool) or not isinstance(interval, int) or not 60 <= interval <= 86400:
+            raise ValueError("interval_seconds must be an integer between 60 and 86400.")
+        if interval != monitor.interval_seconds:
+            monitor.interval_seconds = interval
+            monitor.next_check_at = now if monitor.is_enabled else None
     if "name" in payload:
         name = payload["name"]
         if not isinstance(name, str) or not 1 <= len(name.strip()) <= 100:
@@ -34,10 +45,20 @@ def _apply_fields(monitor: Monitor, payload: dict):
             monitor.url = next_url
             monitor.last_status = None
             monitor.last_checked_at = None
+            monitor.failure_streak = 0
+            monitor.next_check_at = now if monitor.is_enabled else None
+            monitor.lease_token = None
+            monitor.lease_expires_at = None
     if "is_enabled" in payload:
         if not isinstance(payload["is_enabled"], bool):
             raise ValueError("is_enabled must be a boolean.")
-        monitor.is_enabled = payload["is_enabled"]
+        if monitor.is_enabled != payload["is_enabled"]:
+            monitor.is_enabled = payload["is_enabled"]
+            monitor.next_check_at = now if monitor.is_enabled else None
+            monitor.lease_token = None
+            monitor.lease_expires_at = None
+            if not monitor.is_enabled:
+                monitor.failure_streak = 0
 
 
 def _save():
@@ -79,11 +100,14 @@ def list_monitors():
 @jwt_required()
 def create_monitor():
     data = json_object()
-    if data is None or _bad_fields(data, {"name", "url", "is_enabled"}):
-        return error_response("invalid_fields", "JSON may contain only name, url, is_enabled.", 400)
+    if data is None or _bad_fields(data, {"name", "url", "is_enabled", "interval_seconds"}):
+        return error_response("invalid_fields", "JSON may contain only name, url, is_enabled, interval_seconds.", 400)
     if "name" not in data or "url" not in data:
         return error_response("missing_fields", "name and url are required.", 400)
-    monitor = Monitor(user_id=get_jwt_identity())
+    monitor = Monitor(
+        user_id=get_jwt_identity(), is_enabled=True, interval_seconds=300,
+        failure_streak=0, next_check_at=datetime.now(timezone.utc),
+    )
     try:
         _apply_fields(monitor, data)
     except (ValueError, UnsafeTarget) as exc:
@@ -111,12 +135,19 @@ def update_monitor(monitor_id: str):
     if monitor is None:
         return error_response("not_found", "Monitor not found.", 404)
     data = json_object()
-    if data is None or _bad_fields(data, {"name", "url", "is_enabled"}):
-        return error_response("invalid_fields", "JSON may contain only name, url, is_enabled.", 400)
+    if data is None or _bad_fields(data, {"name", "url", "is_enabled", "interval_seconds"}):
+        return error_response("invalid_fields", "JSON may contain only name, url, is_enabled, interval_seconds.", 400)
+    prior_url, prior_enabled = monitor.url, monitor.is_enabled
     try:
         _apply_fields(monitor, data)
     except (ValueError, UnsafeTarget) as exc:
         return error_response("invalid_monitor", str(exc), 400)
+    if monitor.url != prior_url or (prior_enabled and not monitor.is_enabled):
+        open_incidents = db.session.scalars(
+            db.select(Incident).where(Incident.monitor_id == monitor.id, Incident.resolved_at.is_(None))
+        ).all()
+        for incident in open_incidents:
+            incident.resolved_at = datetime.now(timezone.utc)
     error = _save()
     if error is not None:
         return error
@@ -144,20 +175,7 @@ def run_check(monitor_id: str):
         return error_response("monitor_disabled", "Enable this monitor before checking.", 409)
     # Intentionally synchronous for local use; workers will replace it in the next feature.
     result = scan_url(monitor.url)
-    check = CheckResult(
-        monitor_id=monitor.id,
-        checked_at=result.checked_at,
-        checked_url=monitor.url,
-        status=result.status,
-        status_code=result.status_code,
-        response_time_ms=result.response_time_ms,
-        certificate_expires_at=result.certificate_expires_at,
-        final_url=result.final_url,
-        error=result.error,
-    )
-    monitor.last_status = result.status
-    monitor.last_checked_at = result.checked_at
-    db.session.add(check)
+    check = record_scan(monitor, result)
     db.session.commit()
     return jsonify({"check": check.public_dict()}), 201
 
@@ -176,3 +194,35 @@ def list_checks(monitor_id: str):
         .order_by(CheckResult.checked_at.desc(), CheckResult.id.desc()).limit(limit)
     ).all()
     return jsonify({"checks": [row.public_dict() for row in rows]})
+
+
+@bp.get("/<monitor_id>/incidents")
+@jwt_required()
+def list_incidents(monitor_id: str):
+    monitor = _owned_monitor(monitor_id)
+    if monitor is None:
+        return error_response("not_found", "Monitor not found.", 404)
+    limit = _parse_limit(25, 100)
+    if limit is None:
+        return error_response("invalid_pagination", "Use limit 1–100.", 400)
+    rows = db.session.scalars(
+        db.select(Incident).where(Incident.monitor_id == monitor.id)
+        .order_by(Incident.opened_at.desc(), Incident.id.desc()).limit(limit)
+    ).all()
+    return jsonify({"incidents": [row.public_dict() for row in rows]})
+
+
+@bp.get("/<monitor_id>/alerts")
+@jwt_required()
+def list_alerts(monitor_id: str):
+    monitor = _owned_monitor(monitor_id)
+    if monitor is None:
+        return error_response("not_found", "Monitor not found.", 404)
+    limit = _parse_limit(25, 100)
+    if limit is None:
+        return error_response("invalid_pagination", "Use limit 1–100.", 400)
+    rows = db.session.scalars(
+        db.select(AlertEvent).where(AlertEvent.monitor_id == monitor.id)
+        .order_by(AlertEvent.created_at.desc(), AlertEvent.id.desc()).limit(limit)
+    ).all()
+    return jsonify({"alerts": [row.public_dict() for row in rows]})

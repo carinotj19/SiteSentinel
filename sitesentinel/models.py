@@ -72,19 +72,27 @@ class Monitor(db.Model):
     is_enabled = db.Column(db.Boolean, nullable=False, default=True)
     last_status = db.Column(db.String(12), nullable=True)
     last_checked_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    interval_seconds = db.Column(db.Integer, nullable=False, default=300)
+    next_check_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    failure_streak = db.Column(db.Integer, nullable=False, default=0)
+    lease_token = db.Column(db.String(36), nullable=True)
+    lease_expires_at = db.Column(db.DateTime(timezone=True), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(
         db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
-    checks = db.relationship(
-        "CheckResult", back_populates="monitor", cascade="all, delete-orphan"
-    )
+    checks = db.relationship("CheckResult", back_populates="monitor", cascade="all, delete-orphan")
+    incidents = db.relationship("Incident", back_populates="monitor", cascade="all, delete-orphan")
+    alerts = db.relationship("AlertEvent", back_populates="monitor", cascade="all, delete-orphan")
 
     def public_dict(self) -> dict:
         return {
             "id": self.id, "name": self.name, "url": self.url,
             "is_enabled": self.is_enabled, "last_status": self.last_status,
+            "interval_seconds": self.interval_seconds,
+            "next_check_at": _utc_timestamp(self.next_check_at) if self.next_check_at else None,
+            "failure_streak": self.failure_streak,
             "last_checked_at": _utc_timestamp(self.last_checked_at) if self.last_checked_at else None,
             "created_at": _utc_timestamp(self.created_at),
             "updated_at": _utc_timestamp(self.updated_at),
@@ -125,4 +133,57 @@ class CheckResult(db.Model):
             ),
             "final_url": self.final_url,
             "error": self.error,
+        }
+
+
+class Incident(db.Model):
+    """A sustained outage opened after consecutive failed checks."""
+
+    __tablename__ = "incidents"
+    __table_args__ = (db.Index("ix_incidents_monitor_resolved", "monitor_id", "resolved_at"),)
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
+    monitor_id = db.Column(db.String(36), db.ForeignKey("monitors.id", ondelete="CASCADE"), nullable=False)
+    opened_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    resolved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    reason = db.Column(db.String(500), nullable=True)
+    monitor = db.relationship("Monitor", back_populates="incidents")
+
+    def public_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "monitor_id": self.monitor_id,
+            "opened_at": _utc_timestamp(self.opened_at),
+            "resolved_at": _utc_timestamp(self.resolved_at) if self.resolved_at else None,
+            "reason": self.reason,
+            "status": "resolved" if self.resolved_at else "open",
+        }
+
+
+class AlertEvent(db.Model):
+    """Auditable notification event. Delivery occurs in the background worker."""
+
+    __tablename__ = "alert_events"
+    __table_args__ = (db.Index("ix_alert_events_monitor_created", "monitor_id", "created_at"),)
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
+    monitor_id = db.Column(db.String(36), db.ForeignKey("monitors.id", ondelete="CASCADE"), nullable=False)
+    incident_id = db.Column(db.String(36), db.ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False)
+    kind = db.Column(db.String(16), nullable=False)  # down, recovered
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    delivery_status = db.Column(db.String(16), nullable=False, default="pending")
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    next_attempt_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    delivered_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    last_error = db.Column(db.String(400), nullable=True)
+    monitor = db.relationship("Monitor", back_populates="alerts")
+    incident = db.relationship("Incident")
+
+    def public_dict(self) -> dict:
+        return {
+            "id": self.id, "monitor_id": self.monitor_id,
+            "incident_id": self.incident_id, "kind": self.kind,
+            "created_at": _utc_timestamp(self.created_at),
+            "delivery_status": self.delivery_status, "attempts": self.attempts,
+            "delivered_at": _utc_timestamp(self.delivered_at) if self.delivered_at else None,
         }

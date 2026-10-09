@@ -4,7 +4,7 @@
 
 [![Backend CI](https://github.com/carinotj19/SiteSentinel/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/carinotj19/SiteSentinel/actions/workflows/ci.yml)
 
-> **Project status:** Active development. The Flask foundation and on-demand monitoring engine are implemented. Scheduled checks and alerts are upcoming features. This is a learning/portfolio project, **not** a production monitoring service yet.
+> **Project status:** Active development. The Flask foundation, on-demand monitoring, and a standalone scheduled-check worker with incident and alert history are implemented. Optional SMTP delivery is available; distributed queuing and the UI remain future work. This is a learning/portfolio project, **not** a production monitoring service yet.
 
 ## Overview
 
@@ -22,7 +22,8 @@ SiteSentinel aims to give developers and small teams a single place to register 
 | GitHub Actions CI and automated tests | Implemented |
 | On-demand uptime, response-time, and SSL checks | Implemented |
 | User-owned monitors and persisted check history | Implemented |
-| Scheduled checks, background workers, and alerts | Planned: background jobs |
+| Database-backed scheduled checks, incidents, and alert events | Implemented |
+| Optional SMTP email delivery and retry | Implemented (configure SMTP) |
 | Team workspaces, RBAC, and API keys | Planned: workspaces |
 | Broken links, SEO, tracking audits, and dashboards | Planned: site audits |
 
@@ -37,7 +38,7 @@ Scans make real requests to validated public HTTP/HTTPS targets. No monitoring r
 | ORM and migrations | Flask-SQLAlchemy, Flask-Migrate / Alembic |
 | Authentication | Flask-JWT-Extended, Werkzeug password hashing |
 | Testing and linting | Pytest, pytest-cov, Ruff |
-| Tooling | GitHub Actions, Docker Compose (optional) |
+| Tooling | GitHub Actions, separate Python worker, Docker Compose (optional) |
 
 ## Getting started
 
@@ -133,6 +134,8 @@ Invoke-RestMethod http://127.0.0.1:8000/api/v1/users/me -Headers @{Authorization
 | `GET`, `PATCH`, `DELETE` | `/api/v1/monitors/{id}` | Access token |
 | `POST` | `/api/v1/monitors/{id}/check` | Access token |
 | `GET` | `/api/v1/monitors/{id}/checks` | Access token |
+| `GET` | `/api/v1/monitors/{id}/incidents` | Access token |
+| `GET` | `/api/v1/monitors/{id}/alerts` | Access token |
 
 ### Run a website check
 
@@ -147,7 +150,21 @@ Invoke-RestMethod "http://127.0.0.1:8000/api/v1/monitors/$id/check" -Method POST
 Invoke-RestMethod "http://127.0.0.1:8000/api/v1/monitors/$id/checks" -Headers $headers
 ```
 
-These checks run **on demand**, not on a timer. Scan results include HTTP status, response time, and HTTPS certificate expiration when available. Internal/private hosts and unsafe redirects are blocked. Only ports 80 and 443 are supported.
+Manual checks run on demand; **scheduled checks** run in the separate `monitor-worker` process. Results include HTTP status, response time, and HTTPS certificate expiration when available. Internal/private hosts and unsafe redirects are blocked. Only ports 80 and 443 are supported.
+
+### Automatic monitoring (no Docker required)
+
+After running `flask --app sitesentinel db upgrade`, start a **second PowerShell window** in the repository root:
+
+```powershell
+.\\.venv\\Scripts\\python.exe -m flask --app sitesentinel monitor-worker --once
+# Or keep monitoring in the background until Ctrl+C:
+.\\.venv\\Scripts\\python.exe -m flask --app sitesentinel monitor-worker --poll-seconds 10
+```
+
+The worker uses your same `.env` SQLite database and defaults to checking enabled websites every **300 seconds**. Use `interval_seconds` (60–86400) when creating or editing a monitor. An incident opens after **two consecutive failures**; one recovery closes it. Events remain available from `GET /api/v1/monitors/{id}/incidents` and `GET /api/v1/monitors/{id}/alerts`.
+
+Email is **optional**. Without SMTP configuration, notifications are saved as pending events and no email is sent. To enable email, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_STARTTLS` in `.env` (see [API documentation](docs/API.md)). Never commit credentials. SQLite users should run only **one** worker process.
 
 Detailed request/response examples: [API documentation](docs/API.md).
 
@@ -187,7 +204,8 @@ SiteSentinel/
 
 - [x] **Flask foundation** — API architecture, database, authentication, migration, tests
 - [x] **Monitoring engine** (`feat/monitoring-engine`) — Secure website management, uptime/SSL checks, historical results
-- [ ] **Background jobs** (`feat/background-jobs`) — Celery/Redis, periodic monitoring, incident alerting
+- [x] **Background jobs** (`feat/background-jobs`) — Database-polling worker, periodic monitoring, incident tracking, optional SMTP alerts
+- [ ] **Distributed queue** — Celery/Redis and production queue orchestration for higher-scale deployments
 - [ ] **Workspaces & permissions** (`feat/workspaces-rbac`) — Organizations, memberships, roles, API keys
 - [ ] **Site audits & dashboard** (`feat/site-audits`) — Broken links, SEO, tracking scripts, reports
 
@@ -197,7 +215,7 @@ SiteSentinel/
 - This foundation is **not production-hardened**: rate limiting, account recovery, email verification, abuse detection, TLS deployment, and operational monitoring are future work.
 - Never expose Flask's debug server publicly. Keep secrets outside source control.
 - URL scans reject private/non-global DNS answers, restrict schemes and ports, pin public IPs, validate TLS, and re-check redirects. This is an initial SSRF defense, **not** a guarantee of production safety.
-- Manual checks run synchronously. Add job queues, rate limits, quotas, request budgets, and operational security review before public exposure.
+- Manual checks run synchronously. The separate worker polls the database and uses expiring monitor leases; for local SQLite development, run a single worker. Add distributed queues, rate limits, quotas, request budgets, and operational security review before public exposure.
 
 ## Contributing
 

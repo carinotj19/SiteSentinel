@@ -1,4 +1,4 @@
-"""Database entities for SiteSentinel Phase 1."""
+"""Database entities for SiteSentinel."""
 
 from datetime import datetime, timezone
 from uuid import uuid4

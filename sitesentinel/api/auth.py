@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from sitesentinel.api.common import error_response, json_object
 from sitesentinel.extensions import db
-from sitesentinel.models import ConsumedRefreshToken, User
+from sitesentinel.models import ConsumedRefreshToken, Membership, User, Workspace
 
 bp = Blueprint("auth", __name__, url_prefix="/api/v1/auth")
 
@@ -56,6 +56,12 @@ def register():
     user.set_password(password)
     db.session.add(user)
     try:
+        db.session.flush()
+        personal = Workspace(name="Personal Workspace", created_by_user_id=user.id,
+                             personal_owner_user_id=user.id)
+        db.session.add(personal)
+        db.session.flush()
+        db.session.add(Membership(workspace_id=personal.id, user_id=user.id, role="owner"))
         db.session.commit()
     except IntegrityError:
         db.session.rollback()

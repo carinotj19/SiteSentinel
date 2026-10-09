@@ -1,117 +1,187 @@
 # SiteSentinel
 
-A Flask-first backend for a website-monitoring SaaS. **Flask foundation** is a testable REST API foundation: PostgreSQL models/migrations, user authentication, account management, Docker-based local development, and CI. Monitoring workers and scanning are intentionally **not implemented yet**; those belong to the upcoming monitoring-engine and background-jobs features.
+**A Flask-powered website monitoring platform** for keeping an eye on site availability, HTTPS certificates, and operational health.
 
-## Stack
+[![Backend CI](https://github.com/carinotj19/SiteSentinel/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/carinotj19/SiteSentinel/actions/workflows/ci.yml)
 
-- Python 3.12, Flask 3.1, Flask blueprints + application factory
-- Flask-SQLAlchemy, PostgreSQL, Alembic / Flask-Migrate
-- JWT access tokens (15 min) and refresh tokens (7 days)
-- scrypt password hashing via Werkzeug
-- Pytest, Ruff, GitHub Actions
-- Docker Compose + Gunicorn
+> **Project status:** Active development. The Flask foundation (accounts, authentication, database migrations, automated tests) is implemented. Website monitoring is the next feature. This is a learning/portfolio project, **not** a production monitoring service yet.
 
-## Quick start (Windows PowerShell or Unix shell)
+## Overview
 
-1. Clone the repository, enter its directory, and make an environment file:
+SiteSentinel aims to give developers and small teams a single place to register websites, monitor their health, inspect failures, and eventually automate alerts and audits. It's being built as a backend-focused project demonstrating practical API design, data modeling, authentication, background jobs, testing, and deployment.
 
-   ```powershell
-   git clone https://github.com/carinotj19/SiteSentinel.git
-   cd SiteSentinel
-   Copy-Item .env.example .env
-   ```
+### Features
 
-   On macOS/Linux, use `cp .env.example .env`. Replace `JWT_SECRET_KEY` in `.env` with a randomly generated value:
+| Capability | Status |
+| --- | --- |
+| User registration and authentication (JWT) | Implemented |
+| Refresh-token rotation and logout across sessions | Implemented |
+| Account profile API | Implemented |
+| SQLAlchemy models and Alembic migrations | Implemented |
+| API health and database-readiness endpoints | Implemented |
+| GitHub Actions CI and automated tests | Implemented |
+| Uptime, response-time, and SSL checks | Planned: monitoring engine |
+| Persistent scan history and monitor CRUD | Planned: monitoring engine |
+| Scheduled checks, background workers, and alerts | Planned: background jobs |
+| Team workspaces, RBAC, and API keys | Planned: workspaces |
+| Broken links, SEO, tracking audits, and dashboards | Planned: site audits |
 
-   ```powershell
-   python -c "import secrets; print(secrets.token_urlsafe(48))"
-   ```
+No monitoring results or dashboards are simulated or claimed as working before their implementations land.
 
-2. Start PostgreSQL and the API:
+## Tech stack
 
-   ```powershell
-   docker compose up --build
-   ```
+| Area | Tools |
+| --- | --- |
+| API | Python 3.11+, Flask 3.1, Flask Blueprints |
+| Database | PostgreSQL (deployment), SQLite (local development/tests) |
+| ORM and migrations | Flask-SQLAlchemy, Flask-Migrate / Alembic |
+| Authentication | Flask-JWT-Extended, Werkzeug password hashing |
+| Testing and linting | Pytest, pytest-cov, Ruff |
+| Tooling | GitHub Actions, Docker Compose (optional) |
 
-   The API is at **http://127.0.0.1:8000**. Compose waits for PostgreSQL readiness and runs committed database migrations before starting Gunicorn.
+## Getting started
 
-3. Verify it is alive and the database is ready:
+### Local development (Windows, **no Docker required**)
 
-   ```powershell
-   Invoke-RestMethod http://127.0.0.1:8000/api/v1/health/live
-   Invoke-RestMethod http://127.0.0.1:8000/api/v1/health/ready
-   ```
-
-4. Register and sign in:
-
-   ```powershell
-   $body = @{ email = "you@example.com"; display_name = "Site Owner"; password = "choose-a-long-password-123" } | ConvertTo-Json
-   Invoke-RestMethod http://127.0.0.1:8000/api/v1/auth/register -Method Post -ContentType application/json -Body $body
-   $login = Invoke-RestMethod http://127.0.0.1:8000/api/v1/auth/login -Method Post -ContentType application/json -Body (@{email="you@example.com";password="choose-a-long-password-123"}|ConvertTo-Json)
-   Invoke-RestMethod http://127.0.0.1:8000/api/v1/users/me -Headers @{ Authorization = "Bearer $($login.access_token)" }
-   ```
-
-## Local tests (no PostgreSQL required)
-
-Tests use an isolated in-memory SQLite database. For Windows:
+**Prerequisites:** Python 3.11+ and Git. Clone the repository, or use your existing checkout.
 
 ```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements-dev.txt
-ruff check .
-pytest -q --cov=sitesentinel
+git clone https://github.com/carinotj19/SiteSentinel.git
+cd SiteSentinel
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+Copy-Item .env.example .env
 ```
 
-For macOS/Linux use `python3.12 -m venv .venv` and `source .venv/bin/activate`.
+Edit `.env` and set:
 
-## REST endpoints
+```dotenv
+DATABASE_URL=sqlite:///sitesentinel.db
+JWT_SECRET_KEY=replace-this-with-your-own-random-secret
+```
 
-| Verb | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/api/v1/health/live` | None | API liveness |
-| GET | `/api/v1/health/ready` | None | Database readiness |
-| POST | `/api/v1/auth/register` | None | Create user (email, display_name, password) |
-| POST | `/api/v1/auth/login` | None | Obtain access and refresh JWTs |
-| POST | `/api/v1/auth/refresh` | Refresh JWT | Rotate refresh JWT; old refresh becomes unusable |
-| DELETE | `/api/v1/auth/logout` | Either JWT | Log out all sessions by invalidating both token types |
-| GET | `/api/v1/users/me` | Access JWT | Current account |
-| PATCH | `/api/v1/users/me` | Access JWT | Change display_name only |
+Generate a secret with:
 
-Errors have a stable `{ "error": { "code": "...", "message": "..." } }` shape. Full examples are in [docs/API.md](docs/API.md).
+```powershell
+py -3.11 -c "import secrets; print(secrets.token_urlsafe(48))"
+```
 
-## Structure
+Paste the generated value into `.env`. **Never commit `.env` or share tokens.** If you previously set `DATABASE_URL` in PowerShell, change that variable too: environment variables override the values loaded from `.env`.
+
+Initialize the database and start the development server:
+
+```powershell
+.\.venv\Scripts\python.exe -m flask --app sitesentinel db upgrade
+.\.venv\Scripts\python.exe -m flask --app sitesentinel run --debug --port 8000
+```
+
+The API listens at `http://127.0.0.1:8000`. Debug mode is **only for local development**.
+
+### Linux / macOS (SQLite)
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+cp .env.example .env
+# Update DATABASE_URL and JWT_SECRET_KEY in .env as shown above
+flask --app sitesentinel db upgrade
+flask --app sitesentinel run --debug --port 8000
+```
+
+### Docker (optional, PostgreSQL)
+
+The included `compose.yaml` runs the API with a PostgreSQL service. After configuring `.env` with the example's Docker PostgreSQL URL and a real `JWT_SECRET_KEY`:
+
+```bash
+docker compose up --build
+```
+
+This path is optional; you can develop and run tests without Docker.
+
+## API quick start
+
+Check readiness:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/v1/health/ready
+```
+
+Register and sign in (replace the example credentials):
+
+```powershell
+$body = @{email="you@example.com";display_name="Site Owner";password="change-me-to-a-long-password"} | ConvertTo-Json
+Invoke-RestMethod http://127.0.0.1:8000/api/v1/auth/register -Method POST -ContentType "application/json" -Body $body
+
+$login = Invoke-RestMethod http://127.0.0.1:8000/api/v1/auth/login -Method POST -ContentType "application/json" -Body (@{email="you@example.com";password="change-me-to-a-long-password"} | ConvertTo-Json)
+Invoke-RestMethod http://127.0.0.1:8000/api/v1/users/me -Headers @{Authorization="Bearer $($login.access_token)"}
+```
+
+### Available endpoints
+
+| Method | Route | Access |
+| --- | --- | --- |
+| `GET` | `/api/v1/health/live` | Public |
+| `GET` | `/api/v1/health/ready` | Public |
+| `POST` | `/api/v1/auth/register` | Public |
+| `POST` | `/api/v1/auth/login` | Public |
+| `POST` | `/api/v1/auth/refresh` | Refresh token |
+| `DELETE` | `/api/v1/auth/logout` | Access or refresh token |
+| `GET` | `/api/v1/users/me` | Access token |
+| `PATCH` | `/api/v1/users/me` | Access token |
+
+Detailed request/response examples: [API documentation](docs/API.md).
+
+## Testing and quality
+
+Run locally on Windows from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check .
+```
+
+The API test suite uses an isolated SQLite database, so neither Docker nor PostgreSQL is required. GitHub Actions also runs migration checks against PostgreSQL.
+
+## Project structure
 
 ```text
-sitesentinel/
-  __init__.py       # Flask application factory, JWT callbacks, JSON errors
-  config.py         # Environment configuration
-  extensions.py     # Unbound Flask extensions
-  models.py         # User + refresh-token rotation entities
-  api/              # Auth, users, health blueprints
-migrations/         # Committed Alembic migration history
-tests/              # Isolated API tests
-.github/workflows/  # Automated lint/test/compile CI
-compose.yaml        # Development API + PostgreSQL
-Dockerfile          # Gunicorn container
+SiteSentinel/
+├── .github/workflows/   # CI
+├── docs/                # API reference
+├── migrations/          # Versioned database migrations
+├── sitesentinel/
+│   ├── api/             # Versioned Flask blueprints
+│   ├── __init__.py      # Application factory
+│   ├── config.py        # Environment-based settings
+│   ├── extensions.py    # Flask extension instances
+│   └── models.py        # Database models
+├── tests/               # Pytest suite
+├── .env.example         # Safe configuration template
+├── compose.yaml         # Optional PostgreSQL + API setup
+├── Dockerfile
+└── requirements-dev.txt
 ```
 
-## Engineering notes
+## Roadmap
 
-- **Token revocation:** logout increments the account's `auth_version`; the JWT callback checks it on every authenticated request. Refresh JWTs are single-use and recorded in `consumed_refresh_tokens` so they cannot be replayed. A future scheduled cleanup will delete expired JTIs; Flask foundation does not yet perform that maintenance.
-- **Secrets:** never commit `.env`, JWT keys, or production credentials. Docker Compose's password is development-only. Configure different credentials and TLS before external deployment.
-- **Authentication hardening before public deployment:** add rate limiting, password reset/verification, abuse monitoring, account recovery, and a secure deployment configuration. Browser-based token storage requires separate XSS/CSRF review; Flask foundation only accepts `Authorization: Bearer` headers.
-- **Schema:** use `flask --app sitesentinel db upgrade` for migrations; do not run `db.create_all()` in real environments. SQLite tests use `create_all()` solely as a fixture.
-- **No fake scan data:** the monitoring engine, user-defined monitors, team permissions, and dashboards are later milestones.
+- [x] **Flask foundation** — API architecture, database, authentication, migration, tests
+- [ ] **Monitoring engine** (`feat/monitoring-engine`) — Secure website management, uptime/SSL checks, historical results
+- [ ] **Background jobs** (`feat/background-jobs`) — Celery/Redis, periodic monitoring, incident alerting
+- [ ] **Workspaces & permissions** (`feat/workspaces-rbac`) — Organizations, memberships, roles, API keys
+- [ ] **Site audits & dashboard** (`feat/site-audits`) — Broken links, SEO, tracking scripts, reports
 
-## Feature roadmap
+## Security and operational notes
 
-- [x] **Flask foundation** — Flask API, authentication, SQLAlchemy models, migrations, Docker, tests, CI (`feat/foundation`)
-- [ ] **Monitoring engine** — Website checks, SSL certificate inspection, result history, and SSRF protections (`feat/monitoring-engine`)
-- [ ] **Background jobs** — Celery workers, scheduling, alerts, and retries (`feat/background-jobs`)
-- [ ] **Workspaces and access control** — Organizations, memberships, RBAC, and API keys (`feat/workspaces-rbac`)
-- [ ] **Website audits and dashboard** — Broken links, SEO, tracking audits, dashboards, reports, and deployment hardening (`feat/site-audits`)
+- SiteSentinel hashes passwords, restricts profile updates, and uses short-lived JWT access tokens with single-use refresh-token rotation.
+- This foundation is **not production-hardened**: rate limiting, account recovery, email verification, abuse detection, TLS deployment, and operational monitoring are future work.
+- Never expose Flask's debug server publicly. Keep secrets outside source control.
+- User-supplied URL scanning will require SSRF defenses before exposing any monitoring endpoint.
 
-Feature branches are named by what they deliver, not by a numbered phase. Prefer clear PR titles such as **Flask foundation** or **Monitoring engine**.
+## Contributing
 
-> Flask foundation is a development foundation, not an audited production authentication system.
+Development is currently focused on building the core features. Issues and focused pull requests are welcome when the repository is open to collaborators. Use feature-oriented branch names such as `feat/monitoring-engine` and include tests for behavior changes.
+
+## License
+
+No license has been selected yet. Please do not assume the source code is available for reuse under an open-source license.

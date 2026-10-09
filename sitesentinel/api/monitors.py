@@ -1,8 +1,9 @@
 """Owner-scoped monitor CRUD and synchronous development-time checks."""
 
 from datetime import datetime, timezone
+from functools import wraps
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy.exc import IntegrityError
 
@@ -11,13 +12,29 @@ from sitesentinel.extensions import db
 from sitesentinel.models import AlertEvent, CheckResult, Incident, Monitor
 from sitesentinel.monitoring.scanner import UnsafeTarget, normalize_url, scan_url
 from sitesentinel.monitoring.service import record_scan
+from sitesentinel.workspaces import MONITOR_WRITERS, membership_for, personal_workspace_id
 
 bp = Blueprint("monitors", __name__, url_prefix="/api/v1/monitors")
 
 
+def workspace_guard(handler):
+    """Authorize the requested workspace before any monitor query/mutation."""
+    @wraps(handler)
+    def wrapped(*args, workspace_id=None, **kwargs):
+        workspace_id = workspace_id or personal_workspace_id()
+        member = membership_for(workspace_id) if workspace_id else None
+        if member is None:
+            return error_response("not_found", "Workspace not found.", 404)
+        if request.method != "GET" and member.role not in MONITOR_WRITERS:
+            return error_response("forbidden", "Read-only workspace role.", 403)
+        g.workspace_id = workspace_id
+        return handler(*args, **kwargs)
+    return wrapped
+
+
 def _owned_monitor(monitor_id: str) -> Monitor | None:
     return db.session.scalar(
-        db.select(Monitor).where(Monitor.id == monitor_id, Monitor.user_id == get_jwt_identity())
+        db.select(Monitor).where(Monitor.id == monitor_id, Monitor.workspace_id == g.workspace_id)
     )
 
 
@@ -81,16 +98,16 @@ def _parse_limit(default: int, maximum: int) -> int | None:
 
 @bp.get("")
 @jwt_required()
+@workspace_guard
 def list_monitors():
     limit = _parse_limit(50, 200)
     raw_offset = request.args.get("offset", "0")
     if limit is None or len(raw_offset) > 8 or not raw_offset.isascii() or not raw_offset.isdecimal():
         return error_response("invalid_pagination", "Use limit 1–200 and a nonnegative offset.", 400)
     offset = int(raw_offset)
-    owner_id = get_jwt_identity()
-    total = db.session.scalar(db.select(db.func.count()).select_from(Monitor).where(Monitor.user_id == owner_id))
+    total = db.session.scalar(db.select(db.func.count()).select_from(Monitor).where(Monitor.workspace_id == g.workspace_id))
     rows = db.session.scalars(
-        db.select(Monitor).where(Monitor.user_id == owner_id)
+        db.select(Monitor).where(Monitor.workspace_id == g.workspace_id)
         .order_by(Monitor.created_at.desc(), Monitor.id.desc()).offset(offset).limit(limit)
     ).all()
     return jsonify({"monitors": [row.public_dict() for row in rows], "total": total})
@@ -98,20 +115,26 @@ def list_monitors():
 
 @bp.post("")
 @jwt_required()
+@workspace_guard
 def create_monitor():
     data = json_object()
     if data is None or _bad_fields(data, {"name", "url", "is_enabled", "interval_seconds"}):
         return error_response("invalid_fields", "JSON may contain only name, url, is_enabled, interval_seconds.", 400)
     if "name" not in data or "url" not in data:
         return error_response("missing_fields", "name and url are required.", 400)
+    initial_enabled = data.get("is_enabled", True)
+    if not isinstance(initial_enabled, bool):
+        return error_response("invalid_monitor", "is_enabled must be a boolean.", 400)
     monitor = Monitor(
-        user_id=get_jwt_identity(), is_enabled=True, interval_seconds=300,
-        failure_streak=0, next_check_at=datetime.now(timezone.utc),
+        user_id=get_jwt_identity(), workspace_id=g.workspace_id,
+        is_enabled=initial_enabled, interval_seconds=300, failure_streak=0,
     )
     try:
         _apply_fields(monitor, data)
     except (ValueError, UnsafeTarget) as exc:
         return error_response("invalid_monitor", str(exc), 400)
+    # Set the initial schedule only after all requested fields are validated.
+    monitor.next_check_at = datetime.now(timezone.utc) if monitor.is_enabled else None
     db.session.add(monitor)
     error = _save()
     if error is not None:
@@ -121,6 +144,7 @@ def create_monitor():
 
 @bp.get("/<monitor_id>")
 @jwt_required()
+@workspace_guard
 def get_monitor(monitor_id: str):
     monitor = _owned_monitor(monitor_id)
     if monitor is None:
@@ -130,6 +154,7 @@ def get_monitor(monitor_id: str):
 
 @bp.patch("/<monitor_id>")
 @jwt_required()
+@workspace_guard
 def update_monitor(monitor_id: str):
     monitor = _owned_monitor(monitor_id)
     if monitor is None:
@@ -156,6 +181,7 @@ def update_monitor(monitor_id: str):
 
 @bp.delete("/<monitor_id>")
 @jwt_required()
+@workspace_guard
 def delete_monitor(monitor_id: str):
     monitor = _owned_monitor(monitor_id)
     if monitor is None:
@@ -167,6 +193,7 @@ def delete_monitor(monitor_id: str):
 
 @bp.post("/<monitor_id>/check")
 @jwt_required()
+@workspace_guard
 def run_check(monitor_id: str):
     monitor = _owned_monitor(monitor_id)
     if monitor is None:
@@ -182,6 +209,7 @@ def run_check(monitor_id: str):
 
 @bp.get("/<monitor_id>/checks")
 @jwt_required()
+@workspace_guard
 def list_checks(monitor_id: str):
     monitor = _owned_monitor(monitor_id)
     if monitor is None:
@@ -198,6 +226,7 @@ def list_checks(monitor_id: str):
 
 @bp.get("/<monitor_id>/incidents")
 @jwt_required()
+@workspace_guard
 def list_incidents(monitor_id: str):
     monitor = _owned_monitor(monitor_id)
     if monitor is None:
@@ -214,6 +243,7 @@ def list_incidents(monitor_id: str):
 
 @bp.get("/<monitor_id>/alerts")
 @jwt_required()
+@workspace_guard
 def list_alerts(monitor_id: str):
     monitor = _owned_monitor(monitor_id)
     if monitor is None:

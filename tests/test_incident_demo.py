@@ -1,4 +1,4 @@
-"""The documentation/demo path should remain runnable and harmless."""
+"""Offline incident lifecycle stays compatible with the workspace schema."""
 
 from sitesentinel.monitoring.demo import run_demo
 

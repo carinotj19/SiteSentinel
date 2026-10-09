@@ -31,6 +31,12 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     app.register_blueprint(users_bp)
     app.register_blueprint(monitors_bp)
+    # Keep existing /api/v1/monitors for the personal workspace.
+    # Team monitors live at /api/v1/workspaces/<workspace_id>/monitors.
+    app.register_blueprint(monitors_bp, name="workspace_monitors",
+                           url_prefix="/api/v1/workspaces/<workspace_id>/monitors")
+    from sitesentinel.api.workspaces import bp as workspaces_bp
+    app.register_blueprint(workspaces_bp)
 
     from sitesentinel.monitoring.worker import worker_command
     app.cli.add_command(worker_command)

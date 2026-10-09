@@ -1,4 +1,4 @@
-# SiteSentinel REST API — Phase 1
+# SiteSentinel REST API — Flask foundation
 
 Base URL: `http://127.0.0.1:8000/api/v1`
 

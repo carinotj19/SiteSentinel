@@ -23,11 +23,14 @@ def create_app(test_config: dict | None = None) -> Flask:
     from sitesentinel.api.auth import bp as auth_bp
     from sitesentinel.api.health import bp as health_bp
     from sitesentinel.api.users import bp as users_bp
-    from sitesentinel.models import ConsumedRefreshToken, User
+    from sitesentinel.models import CheckResult, ConsumedRefreshToken, Monitor, User
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(health_bp)
+    from sitesentinel.api.monitors import bp as monitors_bp
+
     app.register_blueprint(users_bp)
+    app.register_blueprint(monitors_bp)
 
     @jwt.token_in_blocklist_loader
     def token_is_revoked(_header: dict, payload: dict) -> bool:

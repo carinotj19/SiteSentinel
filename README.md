@@ -4,7 +4,7 @@
 
 [![Backend CI](https://github.com/carinotj19/SiteSentinel/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/carinotj19/SiteSentinel/actions/workflows/ci.yml)
 
-> **Project status:** Active development. The Flask foundation, on-demand monitoring, and a standalone scheduled-check worker with incident and alert history are implemented. Optional SMTP delivery is available; distributed queuing and the UI remain future work. This is a learning/portfolio project, **not** a production monitoring service yet.
+> **Project status:** Active development. The Flask foundation, monitoring engine, background worker, and workspace role controls are implemented. Optional SMTP delivery is available; distributed queuing and the UI remain future work. This is a learning/portfolio project, **not** a production monitoring service yet.
 
 ## Overview
 
@@ -24,7 +24,7 @@ SiteSentinel aims to give developers and small teams a single place to register 
 | User-owned monitors and persisted check history | Implemented |
 | Database-backed scheduled checks, incidents, and alert events | Implemented |
 | Optional SMTP email delivery and retry | Implemented (configure SMTP) |
-| Team workspaces, RBAC, and API keys | Planned: workspaces |
+| Workspaces, roles, tenant-scoped monitors, and invitations | Implemented |\n| API keys and ownership transfers | Planned |
 | Broken links, SEO, tracking audits, and dashboards | Planned: site audits |
 
 Scans make real requests to validated public HTTP/HTTPS targets. No monitoring results or dashboards are simulated.
@@ -186,6 +186,38 @@ The demo uses a **separate, in-memory SQLite database** and synthetic HTTP 200/5
 
 The accompanying automated test asserts the same behavior. Pending notifications stay in that temporary database and are discarded when the demo exits. Real SMTP delivery is a separate, optional integration check that requires your own provider credentials.
 
+## Workspaces and access control
+
+SiteSentinel creates a **personal workspace** automatically when a user registers. Existing users and their monitors receive a personal workspace when migration `0004_workspaces_rbac` runs. Previous `/api/v1/monitors` endpoints continue to refer to your personal workspace; shared-team monitors use the workspace-scoped routes.
+
+| Role | View monitors | Create/check/update/delete monitors | Rename workspace | Invite teammates | Manage memberships |
+| --- | --- | --- | --- | --- | --- |
+| Owner | Yes | Yes | Yes | Admin, member, viewer | Yes |
+| Admin | Yes | Yes | Yes | Member, viewer | No |
+| Member | Yes | Yes | No | No | No |
+| Viewer | Yes | No | No | No | No |
+
+```text
+GET    /api/v1/workspaces
+POST   /api/v1/workspaces
+GET    /api/v1/workspaces/{workspace_id}
+PATCH  /api/v1/workspaces/{workspace_id}
+GET    /api/v1/workspaces/{workspace_id}/members
+PATCH  /api/v1/workspaces/{workspace_id}/members/{user_id}
+DELETE /api/v1/workspaces/{workspace_id}/members/{user_id}
+POST   /api/v1/workspaces/{workspace_id}/invitations
+GET    /api/v1/workspaces/{workspace_id}/invitations
+DELETE /api/v1/workspaces/{workspace_id}/invitations/{invitation_id}
+POST   /api/v1/workspaces/invitations/accept
+GET    /api/v1/workspaces/{workspace_id}/monitors
+POST   /api/v1/workspaces/{workspace_id}/monitors
+...    /api/v1/workspaces/{workspace_id}/monitors/{monitor_id}
+```
+
+Invitation tokens are shown **only once** when created; only their SHA-256 hashes are stored. The invited user registers/signs in using the matching email and accepts the token through the API. Invitations expire after seven days. No invitation email is sent automatically in this iteration; share the token securely during local development. Workspace IDs are not authorization secrets; all resource access checks membership and role.
+
+For request examples and response contracts, see [docs/API.md](docs/API.md). The existing offline incident demonstration remains available through `python -m sitesentinel.monitoring.demo`.
+
 ## Testing and quality
 
 Run locally on Windows from the repository root:
@@ -195,7 +227,7 @@ Run locally on Windows from the repository root:
 .\.venv\Scripts\python.exe -m ruff check .
 ```
 
-The API test suite uses an isolated SQLite database, so neither Docker nor PostgreSQL is required. GitHub Actions also runs migration checks against PostgreSQL.
+The API test suite (including workspace isolation and SMTP mocks) uses an isolated SQLite database, so neither Docker nor PostgreSQL is required. GitHub Actions also runs migration checks against PostgreSQL.
 
 ## Project structure
 
@@ -224,7 +256,7 @@ SiteSentinel/
 - [x] **Monitoring engine** (`feat/monitoring-engine`) — Secure website management, uptime/SSL checks, historical results
 - [x] **Background jobs** (`feat/background-jobs`) — Database-polling worker, periodic monitoring, incident tracking, optional SMTP alerts
 - [ ] **Distributed queue** — Celery/Redis and production queue orchestration for higher-scale deployments
-- [ ] **Workspaces & permissions** (`feat/workspaces-rbac`) — Organizations, memberships, roles, API keys
+- [x] **Workspaces & permissions** (`feat/workspaces-rbac`) — Organizations, memberships, roles, invitation tokens, and tenant-scoped monitors\n- [ ] **API keys & ownership transfers** — Scoped API credentials and safe ownership transitions
 - [ ] **Site audits & dashboard** (`feat/site-audits`) — Broken links, SEO, tracking scripts, reports
 
 ## Security and operational notes

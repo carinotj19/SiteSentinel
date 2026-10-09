@@ -4,8 +4,8 @@ Revision ID: 0001_users_and_tokens
 Revises:
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0001_users_and_tokens"
 down_revision = None

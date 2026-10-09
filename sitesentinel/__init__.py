@@ -32,6 +32,9 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.register_blueprint(users_bp)
     app.register_blueprint(monitors_bp)
 
+    from sitesentinel.monitoring.worker import worker_command
+    app.cli.add_command(worker_command)
+
     @jwt.token_in_blocklist_loader
     def token_is_revoked(_header: dict, payload: dict) -> bool:
         # All tokens carry the user's current auth version.

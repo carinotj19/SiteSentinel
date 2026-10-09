@@ -122,9 +122,12 @@ def create_monitor():
         return error_response("invalid_fields", "JSON may contain only name, url, is_enabled, interval_seconds.", 400)
     if "name" not in data or "url" not in data:
         return error_response("missing_fields", "name and url are required.", 400)
+    initial_enabled = data.get("is_enabled", True)
+    if not isinstance(initial_enabled, bool):
+        return error_response("invalid_monitor", "is_enabled must be a boolean.", 400)
     monitor = Monitor(
-        user_id=get_jwt_identity(), workspace_id=g.workspace_id, is_enabled=True, interval_seconds=300,
-        failure_streak=0,
+        user_id=get_jwt_identity(), workspace_id=g.workspace_id,
+        is_enabled=initial_enabled, interval_seconds=300, failure_streak=0,
     )
     try:
         _apply_fields(monitor, data)

@@ -7,6 +7,23 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: sitesentinel
+          POSTGRES_USER: sitesentinel
+          POSTGRES_PASSWORD: sitesentinel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sitesentinel -d sitesentinel"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://sitesentinel:sitesentinel@localhost:5432/sitesentinel
+      JWT_SECRET_KEY: ci-test-only-do-not-use-in-production
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -15,6 +32,10 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
+      - name: PostgreSQL migration smoke test
+        run: |
+          flask --app sitesentinel db upgrade
+          flask --app sitesentinel db current
       - name: Lint
         run: ruff check .
       - name: Unit and API tests

@@ -4,7 +4,7 @@
 
 [![Backend CI](https://github.com/carinotj19/SiteSentinel/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/carinotj19/SiteSentinel/actions/workflows/ci.yml)
 
-> **Project status:** Active development. The Flask foundation (accounts, authentication, database migrations, automated tests) is implemented. Website monitoring is the next feature. This is a learning/portfolio project, **not** a production monitoring service yet.
+> **Project status:** Active development. The Flask foundation and on-demand monitoring engine are implemented. Scheduled checks and alerts are upcoming features. This is a learning/portfolio project, **not** a production monitoring service yet.
 
 ## Overview
 
@@ -20,13 +20,13 @@ SiteSentinel aims to give developers and small teams a single place to register 
 | SQLAlchemy models and Alembic migrations | Implemented |
 | API health and database-readiness endpoints | Implemented |
 | GitHub Actions CI and automated tests | Implemented |
-| Uptime, response-time, and SSL checks | Planned: monitoring engine |
-| Persistent scan history and monitor CRUD | Planned: monitoring engine |
+| On-demand uptime, response-time, and SSL checks | Implemented |
+| User-owned monitors and persisted check history | Implemented |
 | Scheduled checks, background workers, and alerts | Planned: background jobs |
 | Team workspaces, RBAC, and API keys | Planned: workspaces |
 | Broken links, SEO, tracking audits, and dashboards | Planned: site audits |
 
-No monitoring results or dashboards are simulated or claimed as working before their implementations land.
+Scans make real requests to validated public HTTP/HTTPS targets. No monitoring results or dashboards are simulated.
 
 ## Tech stack
 
@@ -129,6 +129,25 @@ Invoke-RestMethod http://127.0.0.1:8000/api/v1/users/me -Headers @{Authorization
 | `DELETE` | `/api/v1/auth/logout` | Access or refresh token |
 | `GET` | `/api/v1/users/me` | Access token |
 | `PATCH` | `/api/v1/users/me` | Access token |
+| `GET`, `POST` | `/api/v1/monitors` | Access token |
+| `GET`, `PATCH`, `DELETE` | `/api/v1/monitors/{id}` | Access token |
+| `POST` | `/api/v1/monitors/{id}/check` | Access token |
+| `GET` | `/api/v1/monitors/{id}/checks` | Access token |
+
+### Run a website check
+
+Using your `$login` token from the login example above:
+
+```powershell
+$headers = @{Authorization = "Bearer $($login.access_token)"}
+$body = @{name = "Example website"; url = "https://example.com"} | ConvertTo-Json
+$monitor = Invoke-RestMethod http://127.0.0.1:8000/api/v1/monitors -Method POST -Headers $headers -ContentType "application/json" -Body $body
+$id = $monitor.monitor.id
+Invoke-RestMethod "http://127.0.0.1:8000/api/v1/monitors/$id/check" -Method POST -Headers $headers
+Invoke-RestMethod "http://127.0.0.1:8000/api/v1/monitors/$id/checks" -Headers $headers
+```
+
+These checks run **on demand**, not on a timer. Scan results include HTTP status, response time, and HTTPS certificate expiration when available. Internal/private hosts and unsafe redirects are blocked. Only ports 80 and 443 are supported.
 
 Detailed request/response examples: [API documentation](docs/API.md).
 
@@ -152,6 +171,7 @@ SiteSentinel/
 ├── migrations/          # Versioned database migrations
 ├── sitesentinel/
 │   ├── api/             # Versioned Flask blueprints
+│   ├── monitoring/      # SSRF-conscious HTTP/TLS scanner
 │   ├── __init__.py      # Application factory
 │   ├── config.py        # Environment-based settings
 │   ├── extensions.py    # Flask extension instances
@@ -166,7 +186,7 @@ SiteSentinel/
 ## Roadmap
 
 - [x] **Flask foundation** — API architecture, database, authentication, migration, tests
-- [ ] **Monitoring engine** (`feat/monitoring-engine`) — Secure website management, uptime/SSL checks, historical results
+- [x] **Monitoring engine** (`feat/monitoring-engine`) — Secure website management, uptime/SSL checks, historical results
 - [ ] **Background jobs** (`feat/background-jobs`) — Celery/Redis, periodic monitoring, incident alerting
 - [ ] **Workspaces & permissions** (`feat/workspaces-rbac`) — Organizations, memberships, roles, API keys
 - [ ] **Site audits & dashboard** (`feat/site-audits`) — Broken links, SEO, tracking scripts, reports
@@ -176,7 +196,8 @@ SiteSentinel/
 - SiteSentinel hashes passwords, restricts profile updates, and uses short-lived JWT access tokens with single-use refresh-token rotation.
 - This foundation is **not production-hardened**: rate limiting, account recovery, email verification, abuse detection, TLS deployment, and operational monitoring are future work.
 - Never expose Flask's debug server publicly. Keep secrets outside source control.
-- User-supplied URL scanning will require SSRF defenses before exposing any monitoring endpoint.
+- URL scans reject private/non-global DNS answers, restrict schemes and ports, pin public IPs, validate TLS, and re-check redirects. This is an initial SSRF defense, **not** a guarantee of production safety.
+- Manual checks run synchronously. Add job queues, rate limits, quotas, request budgets, and operational security review before public exposure.
 
 ## Contributing
 

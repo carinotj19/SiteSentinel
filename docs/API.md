@@ -149,3 +149,74 @@ SMTP_STARTTLS=true
 Without `SMTP_HOST`, alerts stay `pending` (visible via the API) and **no email is sent**. With SMTP enabled the worker attempts queued delivery and retries transient failures with backoff (up to 3 attempts). Delivery uses at-least-once semantics: duplicates are possible after a process crash during delivery.
 
 **Operational limits:** This is a simple database-polling worker, not Celery/Redis. Run **one worker** when using SQLite; PostgreSQL is more appropriate for multi-process deployments. Keep worker and API on the same database, and add quotas, rate limits, and dedicated queue infrastructure before public deployment.
+
+
+## Workspaces and role-based access control
+
+All routes in this section use JWT **access** tokens. Workspace IDs are always checked against the caller's `workspace_memberships` record. Unrelated users receive `404 not_found`, rather than learning whether the workspace exists. Insufficient permissions for a known workspace return `403 forbidden`.
+
+On registration, SiteSentinel creates a personal workspace automatically. Existing users and their monitors are migrated into a personal workspace by `0004_workspaces_rbac`. The existing `/monitors` routes continue to operate on the authenticated user's **personal workspace**, while `/workspaces/{workspace_id}/monitors` provides team-scoped operations with the same HTTP verbs, child routes, and JSON shapes.
+
+| Method | Endpoint | Minimum permission |
+| --- | --- | --- |
+| `GET` | `/workspaces` | Signed in; returns only joined workspaces |
+| `POST` | `/workspaces` | Signed in; creates a new owner workspace |
+| `GET` | `/workspaces/{id}` | Member |
+| `PATCH` | `/workspaces/{id}` | Owner, admin |
+| `GET` | `/workspaces/{id}/members` | Member |
+| `PATCH` | `/workspaces/{id}/members/{user_id}` | Owner |
+| `DELETE` | `/workspaces/{id}/members/{user_id}` | Owner |
+| `POST` | `/workspaces/{id}/invitations` | Owner, admin |
+| `GET` | `/workspaces/{id}/invitations` | Owner, admin |
+| `DELETE` | `/workspaces/{id}/invitations/{invitation_id}` | Owner, admin |
+| `POST` | `/workspaces/invitations/accept` | Signed-in matching recipient |
+| `GET` | `/workspaces/{id}/monitors` and child reads | Member |
+| `POST/PATCH/DELETE` | `/workspaces/{id}/monitors` and child writes | Owner, admin, member |
+
+**Role policy:** `owner` has full management access and can invite `admin`, `member`, and `viewer`. An `admin` can rename the workspace and invite only `member` or `viewer`. A `member` can manage website monitors. A `viewer` can only read. Ownership transfer is not available; attempts to modify or remove an owner are rejected, preventing accidental orphaned workspaces.
+
+### Create a team workspace
+
+```http
+POST /api/v1/workspaces
+Content-Type: application/json
+Authorization: Bearer <access-token>
+
+{"name":"Example Operations"}
+```
+
+Returns `201` with `{"workspace":{"id":"<uuid>","name":"Example Operations","role":"owner","is_personal":false,"created_at":"<ISO-UTC>"}}`. Use that workspace ID for team monitor operations:
+
+```http
+POST /api/v1/workspaces/<workspace-id>/monitors
+Content-Type: application/json
+Authorization: Bearer <access-token>
+
+{"name":"Example","url":"https://example.com","interval_seconds":300}
+```
+
+### Invite a teammate (no email delivery required)
+
+```http
+POST /api/v1/workspaces/<workspace-id>/invitations
+Content-Type: application/json
+Authorization: Bearer <owner-or-admin-access-token>
+
+{"email":"teammate@example.com","role":"viewer"}
+```
+
+Returns `201` with `{"invitation":{...},"token":"<one-time-token>"}`. **The raw token is returned only once**. The database stores a SHA-256 token digest; no raw invitation token can be retrieved from the list endpoint. It expires in seven days. Invitation delivery is **not automatic** in this feature; local developers share tokens out of band.
+
+The teammate registers/logs in using the invited email and accepts:
+
+```http
+POST /api/v1/workspaces/invitations/accept
+Content-Type: application/json
+Authorization: Bearer <teammate-access-token>
+
+{"token":"<one-time-token>"}
+```
+
+Returns `200` and the joined workspace. Reused/revoked tokens return `404`, expired tokens `410`, wrong-user tokens `403`, and existing memberships `409`.
+
+**Hardening still needed before public launch:** invitation rate limits and quotas, verified-email onboarding, ownership transfer, admin/member offboarding workflows, audit trails, database-backed API keys, and workspace-aware notification recipients. Current email alerts still address the monitor creator rather than all workspace members.

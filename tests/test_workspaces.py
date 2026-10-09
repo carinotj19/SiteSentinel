@@ -1,6 +1,7 @@
 """Role-gated workspace actions, invitation replay, and strict tenant isolation."""
 
 from datetime import datetime, timedelta, timezone
+
 from sitesentinel.extensions import db
 from sitesentinel.models import Invitation
 from sitesentinel.monitoring.scanner import ScanResult

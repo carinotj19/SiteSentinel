@@ -130,6 +130,9 @@ def create_monitor():
         _apply_fields(monitor, data)
     except (ValueError, UnsafeTarget) as exc:
         return error_response("invalid_monitor", str(exc), 400)
+    # A disabled monitor must never retain a due timestamp at creation.
+    if not monitor.is_enabled:
+        monitor.next_check_at = None
     db.session.add(monitor)
     error = _save()
     if error is not None:

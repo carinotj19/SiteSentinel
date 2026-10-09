@@ -124,15 +124,14 @@ def create_monitor():
         return error_response("missing_fields", "name and url are required.", 400)
     monitor = Monitor(
         user_id=get_jwt_identity(), workspace_id=g.workspace_id, is_enabled=True, interval_seconds=300,
-        failure_streak=0, next_check_at=datetime.now(timezone.utc),
+        failure_streak=0,
     )
     try:
         _apply_fields(monitor, data)
     except (ValueError, UnsafeTarget) as exc:
         return error_response("invalid_monitor", str(exc), 400)
-    # A disabled monitor must never retain a due timestamp at creation.
-    if not monitor.is_enabled:
-        monitor.next_check_at = None
+    # Set the initial schedule only after all requested fields are validated.
+    monitor.next_check_at = datetime.now(timezone.utc) if monitor.is_enabled else None
     db.session.add(monitor)
     error = _save()
     if error is not None:

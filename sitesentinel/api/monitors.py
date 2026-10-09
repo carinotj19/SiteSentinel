@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 
 from sitesentinel.api.common import error_response, json_object
 from sitesentinel.extensions import db
-from sitesentinel.models import AlertEvent, Incident, Monitor
+from sitesentinel.models import AlertEvent, CheckResult, Incident, Monitor
 from sitesentinel.monitoring.scanner import UnsafeTarget, normalize_url, scan_url
 from sitesentinel.monitoring.service import record_scan
 from sitesentinel.workspaces import MONITOR_WRITERS, membership_for, personal_workspace_id

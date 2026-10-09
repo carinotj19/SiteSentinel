@@ -134,7 +134,7 @@ class Monitor(db.Model):
     last_status = db.Column(db.String(12), nullable=True)
     last_checked_at = db.Column(db.DateTime(timezone=True), nullable=True)
     interval_seconds = db.Column(db.Integer, nullable=False, default=300)
-    next_check_at = db.Column(db.DateTime(timezone=True), nullable=True, default=lambda: datetime.now(timezone.utc))
+    next_check_at = db.Column(db.DateTime(timezone=True), nullable=True)
     failure_streak = db.Column(db.Integer, nullable=False, default=0)
     lease_token = db.Column(db.String(36), nullable=True)
     lease_expires_at = db.Column(db.DateTime(timezone=True), nullable=True)

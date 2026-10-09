@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sitesentinel
+      POSTGRES_PASSWORD: sitesentinel
+      POSTGRES_DB: sitesentinel
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sitesentinel -d sitesentinel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    env_file: .env
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "flask --app sitesentinel db upgrade && gunicorn
+      --bind 0.0.0.0:8000 --workers 2 'sitesentinel:create_app()'"
+
+volumes:
+  pg_data:

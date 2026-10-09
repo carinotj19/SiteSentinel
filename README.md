@@ -1,6 +1,6 @@
 # SiteSentinel
 
-A Flask-first backend for a website-monitoring SaaS. **Phase 1** is a testable REST API foundation: PostgreSQL models/migrations, user authentication, account management, Docker-based local development, and CI. Monitoring workers and scanning are intentionally **not implemented yet**; those begin in Phase 2 and Phase 3.
+A Flask-first backend for a website-monitoring SaaS. **Flask foundation** is a testable REST API foundation: PostgreSQL models/migrations, user authentication, account management, Docker-based local development, and CI. Monitoring workers and scanning are intentionally **not implemented yet**; those belong to the upcoming monitoring-engine and background-jobs features.
 
 ## Stack
 
@@ -98,18 +98,20 @@ Dockerfile          # Gunicorn container
 
 ## Engineering notes
 
-- **Token revocation:** logout increments the account's `auth_version`; the JWT callback checks it on every authenticated request. Refresh JWTs are single-use and recorded in `consumed_refresh_tokens` so they cannot be replayed. A future scheduled cleanup will delete expired JTIs; Phase 1 does not yet perform that maintenance.
+- **Token revocation:** logout increments the account's `auth_version`; the JWT callback checks it on every authenticated request. Refresh JWTs are single-use and recorded in `consumed_refresh_tokens` so they cannot be replayed. A future scheduled cleanup will delete expired JTIs; Flask foundation does not yet perform that maintenance.
 - **Secrets:** never commit `.env`, JWT keys, or production credentials. Docker Compose's password is development-only. Configure different credentials and TLS before external deployment.
-- **Authentication hardening before public deployment:** add rate limiting, password reset/verification, abuse monitoring, account recovery, and a secure deployment configuration. Browser-based token storage requires separate XSS/CSRF review; Phase 1 only accepts `Authorization: Bearer` headers.
+- **Authentication hardening before public deployment:** add rate limiting, password reset/verification, abuse monitoring, account recovery, and a secure deployment configuration. Browser-based token storage requires separate XSS/CSRF review; Flask foundation only accepts `Authorization: Bearer` headers.
 - **Schema:** use `flask --app sitesentinel db upgrade` for migrations; do not run `db.create_all()` in real environments. SQLite tests use `create_all()` solely as a fixture.
 - **No fake scan data:** the monitoring engine, user-defined monitors, team permissions, and dashboards are later milestones.
 
-## Roadmap
+## Feature roadmap
 
-- [x] Phase 1: Flask API, auth, SQLAlchemy schema, migrations, Docker, tests, CI
-- [ ] Phase 2: Website monitoring and result history with SSRF defenses
-- [ ] Phase 3: Celery workers, scheduling, alerts, retries
-- [ ] Phase 4: Organizations, memberships, RBAC, API keys
-- [ ] Phase 5: Broken links, SEO, tracking audits, dashboards, reports, production hardening
+- [x] **Flask foundation** — Flask API, authentication, SQLAlchemy models, migrations, Docker, tests, CI (`feat/foundation`)
+- [ ] **Monitoring engine** — Website checks, SSL certificate inspection, result history, and SSRF protections (`feat/monitoring-engine`)
+- [ ] **Background jobs** — Celery workers, scheduling, alerts, and retries (`feat/background-jobs`)
+- [ ] **Workspaces and access control** — Organizations, memberships, RBAC, and API keys (`feat/workspaces-rbac`)
+- [ ] **Website audits and dashboard** — Broken links, SEO, tracking audits, dashboards, reports, and deployment hardening (`feat/site-audits`)
 
-> Phase 1 is a development foundation, not an audited production authentication system.
+Feature branches are named by what they deliver, not by a numbered phase. Prefer clear PR titles such as **Flask foundation** or **Monitoring engine**.
+
+> Flask foundation is a development foundation, not an audited production authentication system.

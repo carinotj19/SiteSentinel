@@ -1,8 +1,7 @@
 """SMTP messages use the configured sender, recipient and TLS without real network traffic."""
 
-from datetime import datetime, timezone
-
 import smtplib
+from datetime import datetime, timezone
 
 from sitesentinel.extensions import db
 from sitesentinel.models import AlertEvent, Incident, Monitor

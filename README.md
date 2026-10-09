@@ -168,6 +168,24 @@ Email is **optional**. Without SMTP configuration, notifications are saved as pe
 
 Detailed request/response examples: [API documentation](docs/API.md).
 
+### Verify incidents without disrupting a real website
+
+To demonstrate the full incident lifecycle safely, run this from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m sitesentinel.monitoring.demo
+```
+
+The demo uses a **separate, in-memory SQLite database** and synthetic HTTP 200/503 results. It does not visit any websites, modify your real SQLite data, or send email. It illustrates:
+
+1. A healthy check (no incident).
+2. A first failed check (failure streak increases; no alert yet).
+3. A second consecutive failure (one incident opens; a `down` alert is queued).
+4. A third failure (no duplicate incident or alert).
+5. A recovery (the incident closes; one `recovered` alert is queued).
+
+The accompanying automated test asserts the same behavior. Pending notifications stay in that temporary database and are discarded when the demo exits. Real SMTP delivery is a separate, optional integration check that requires your own provider credentials.
+
 ## Testing and quality
 
 Run locally on Windows from the repository root:

@@ -330,6 +330,14 @@ SiteSentinel/
 
 ## Security and operational notes
 
+The [security and portfolio-readiness review](docs/SECURITY_REVIEW.md) documents
+reviewed safeguards, recent fixes to stale manual checks/audits and revoked-member
+emails, and concrete blockers before an internet-facing deployment. Automated
+tests do **not** establish production security. Use local or access-restricted
+portfolio demonstrations until verification, rate limits and queued scanning
+are implemented.
+
+
 - SiteSentinel hashes passwords, restricts profile updates, and uses short-lived JWT access tokens with single-use refresh-token rotation.
 - This foundation is **not production-hardened**: rate limiting, account recovery, email verification, abuse detection, TLS deployment, and operational monitoring are future work.
 - Never expose Flask's debug server publicly. Keep secrets outside source control.

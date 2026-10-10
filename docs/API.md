@@ -262,3 +262,64 @@ presence does not prove analytics events are delivered. HTML responses are
 limited to 256 KiB, with a default five-link budget and up to three redirects
 per request. Scans are synchronous and are not intended for untrusted public
 traffic without rate limits, quotas, and background job orchestration.
+
+
+## Dashboard reporting (read-only)
+
+Report endpoints summarize **already persisted** monitor checks, incidents, and
+site audits. They never fetch or rescan websites. Every report requires a valid
+JWT and an active membership in its workspace. The role may be owner, admin,
+member, or viewer.
+
+For the authenticated user's personal workspace:
+
+- GET /api/v1/reports/overview?days=7
+- GET /api/v1/reports/response-times?days=7&limit=50
+- GET /api/v1/reports/incidents?days=7&limit=50
+- GET /api/v1/reports/audit-highlights?days=7&limit=50
+
+For a team workspace, replace /api/v1/reports with
+/api/v1/workspaces/{workspace_id}/reports. Reading another workspace's reports
+without membership returns 404. Query parameters are validated: days must
+be an integer between 1 and 90 (default 7); limit must be an integer 1–100
+(default 50) on the three list endpoints. Unknown query parameters are rejected.
+
+### Overview response
+
+The overview includes:
+- monitors.total, enabled, disabled, and last_status counts (up, down,
+  blocked, unknown); these are current monitor snapshots, not time-window counts.
+- checks.total, up, failed_or_blocked, success_percentage, and
+  average_success_response_time_ms in the requested UTC window.
+- open_incidents (currently unresolved, including incidents older than the window).
+- audits_in_window and the effective UTC window.
+
+**Important:** success_percentage is the percentage of actual stored *check
+samples* marked up. It is NOT a duration-weighted uptime SLA. If no checks
+exist, success_percentage and average_success_response_time_ms are null,
+not 0%. Response time is averaged over successful checks with a measured value.
+
+### Response-times
+
+Returns daily points with date, monitor_id, monitor_name, checks, average_ms,
+minimum_ms, maximum_ms; down/blocked checks and null response times are omitted.
+Up to limit daily monitor buckets are returned, most recent days first.
+The truncated flag indicates when more buckets are available.
+
+### Incidents
+
+Includes still-open incidents regardless of their start date, plus incidents
+opened or resolved inside the selected window. Entries include the monitor's
+name and existing incident fields, most recently opened first, subject to limit.
+
+### Audit highlights
+
+Returns up to limit recent audit snapshots, newest first. Completed audits
+include seo_issue_codes, broken_links count, and static tracking_evidence
+booleans (ga4, gtm, meta_pixel). Failed audits carry null for these
+interpretations rather than claiming no issues or no tracking.
+
+All reports are limited by workspace membership. Results are pageable only by
+the documented limit/truncated semantics in this first backend reporting version;
+cursor pagination and a frontend dashboard are future improvements. These
+endpoints do not create new migrations or persist derived metrics.

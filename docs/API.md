@@ -220,3 +220,45 @@ Authorization: Bearer <teammate-access-token>
 Returns `200` and the joined workspace. Reused/revoked tokens return `404`, expired tokens `410`, wrong-user tokens `403`, and existing memberships `409`.
 
 **Hardening still needed before public launch:** invitation rate limits and quotas, verified-email onboarding, ownership transfer, admin/member offboarding workflows, audit trails, database-backed API keys, and workspace-aware notification recipients. Current email alerts still address the monitor creator rather than all workspace members.
+
+
+## Static website audits
+
+SiteSentinel now supports bounded, on-demand static HTML audits of monitored sites.
+These scans do not execute JavaScript or recursively crawl websites. Only the
+monitored page and up to ten same-origin links are fetched; each request uses
+the monitoring scanner's public DNS/IP checks, TLS validation, and redirect
+revalidation.
+
+| Method | Personal monitor route | Team/workspace route |
+| --- | --- | --- |
+| POST | /monitors/{id}/audits | /workspaces/{workspace_id}/monitors/{id}/audits |
+| GET | /monitors/{id}/audits?limit=25 | /workspaces/{workspace_id}/monitors/{id}/audits?limit=25 |
+| GET | /monitors/{id}/audits/{audit_id} | /workspaces/{workspace_id}/monitors/{id}/audits/{audit_id} |
+
+To start an audit, POST to /api/v1/monitors/{id}/audits with optional JSON:
+{"link_limit": 5}. Allowed values are integers 0–10, default 5. The HTTP 201
+response contains a persisted report with id, monitor_id, audited_at,
+requested_url, final_url, status, status_code, link_limit, error, and findings.
+
+- A completed report has parsed HTML; a failed report records HTTP errors,
+  unsafe redirects, timeouts, large pages, or non-HTML content.
+- findings.seo includes title, meta description, H1 headings, canonical link,
+  robots directives, and missing-title, missing-description, missing-H1,
+  multiple-H1, and noindex issue codes.
+- findings.tracking includes static evidence and extracted measurement/container
+  IDs for GA4, Google Tag Manager, and Meta Pixel.
+- findings.links includes checked same-origin links, broken results, skipped
+  external/unsupported links, and whether the link budget truncated checks.
+- List responses contain report summaries only; GET by audit ID includes findings.
+
+A workspace member can read audit history. Owner, admin, or member can start
+an audit; viewers receive 403 for POST. Unrelated workspaces and monitors
+return 404. Disabled monitors reject audits with HTTP 409.
+
+**Scope limitations:** Static HTML can miss tags that are injected by JavaScript,
+consent tools, or GTM; missing evidence does not prove tracking is absent, and
+presence does not prove analytics events are delivered. HTML responses are
+limited to 256 KiB, with a default five-link budget and up to three redirects
+per request. Scans are synchronous and are not intended for untrusted public
+traffic without rate limits, quotas, and background job orchestration.

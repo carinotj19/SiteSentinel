@@ -4,7 +4,7 @@
 
 [![Backend CI](https://github.com/carinotj19/SiteSentinel/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/carinotj19/SiteSentinel/actions/workflows/ci.yml)
 
-> **Project status:** Active development. The Flask foundation, monitoring engine, background worker, workspace role controls, and initial static site auditing are implemented. Optional SMTP delivery is available; distributed queuing and the UI remain future work. This is a learning/portfolio project, **not** a production monitoring service yet.
+> **Project status:** Backend portfolio showcase. Authentication, workspace permissions, monitoring, incidents, site audits, reporting, and OpenAPI/Swagger are implemented and tested. Public SaaS deployment is **out of scope**; see [deployment/security limits](docs/SECURITY_REVIEW.md).
 
 ## Overview
 
@@ -28,9 +28,10 @@ SiteSentinel aims to give developers and small teams a single place to register 
 | API keys and ownership transfers | Planned |
 | Bounded broken-link, SEO, and static tracking audits | Implemented (on demand) |
 | Read-only dashboard reporting APIs | Implemented |
+| Local synthetic read-only portfolio showcase | Implemented (localhost only) |
 | Frontend dashboard / JavaScript-executing audits | Planned |
 
-Scans make real requests to validated public HTTP/HTTPS targets. No monitoring results or dashboards are simulated.
+In normal operation, scans make real requests to validated public HTTP/HTTPS targets. The **separate, read-only local portfolio demo** uses clearly labeled synthetic samples and performs no network scanning.
 
 ## Tech stack
 
@@ -42,6 +43,33 @@ Scans make real requests to validated public HTTP/HTTPS targets. No monitoring r
 | Authentication | Flask-JWT-Extended, Werkzeug password hashing |
 | Testing and linting | Pytest, pytest-cov, Ruff |
 | Tooling | GitHub Actions, separate Python worker, Docker Compose (optional) |
+
+## Quick portfolio demo (read-only, no Docker)
+
+Run a **private, loopback-only** copy using an ephemeral in-memory SQLite
+database and preseeded synthetic monitoring data:
+
+~~~powershell
+cd E:\Repo\SiteSentinel
+.\.venv\Scripts\python.exe -m sitesentinel.portfolio_demo
+~~~
+
+Open **http://127.0.0.1:8000/api/docs**. Use Swagger's login endpoint
+with **demo@example.com** / **portfolio-demo-only-2026**, then choose
+**Authorize** and enter the returned access token. Inspect reporting,
+monitor checks, incidents, and audit highlights without sending real
+network requests. The demo is read-only, does not touch your normal database,
+and erases everything when stopped with Ctrl+C. If a Flask server is already
+running on port 8000, stop it first.
+
+Full [Windows demo walkthrough](docs/DEMO.md) ·
+[Architecture and engineering decisions](docs/PORTFOLIO.md) ·
+[OpenAPI specification](docs/openapi.json) ·
+[Security review](docs/SECURITY_REVIEW.md)
+
+**Do not publish, port-forward, or tunnel the demo server.** This is a
+localhost portfolio demonstration, not public hosting.
+
 
 ## Getting started
 
@@ -323,6 +351,7 @@ SiteSentinel/
 ├── sitesentinel/
 │   ├── api/             # Versioned Flask blueprints
 │   ├── monitoring/      # SSRF-conscious HTTP/TLS scanner
+│   ├── portfolio_demo.py # Isolated local showcase
 │   ├── __init__.py      # Application factory
 │   ├── config.py        # Environment-based settings
 │   ├── extensions.py    # Flask extension instances
@@ -344,7 +373,8 @@ SiteSentinel/
 - [ ] **API keys & ownership transfers** — Scoped API credentials and safe ownership transitions
 - [x] **Site audits** (`feat/site-audits`) — Bounded static SEO, tracking-script and broken-link reports
 - [x] **Dashboard reporting** (`feat/dashboard-reporting`) — Scoped summaries, trends, incidents, audit highlights
-- [ ] **Frontend dashboard / deeper audits** — UI, JavaScript checks, full-site crawling and queued audit jobs
+- [x] **Local portfolio demo** (`feat/portfolio-demo`) — Seeded, read-only in-memory API walkthrough
+- [ ] **Optional later enhancements** — Frontend dashboard, JavaScript auditing, queues (not required for the backend portfolio)
 
 ## Security and operational notes
 

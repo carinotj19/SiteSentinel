@@ -52,7 +52,7 @@ def swagger_ui():
     response.headers["Cache-Control"] = "no-store"
     response.headers["Content-Security-Policy"] = (
         "default-src 'none'; "
-        f"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "script-src 'self' https://cdn.jsdelivr.net; "
         "connect-src 'self'; img-src 'self' data:; font-src 'self' data: https://cdn.jsdelivr.net; "
         "base-uri 'none'; frame-ancestors 'none'"

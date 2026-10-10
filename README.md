@@ -8,7 +8,36 @@
 
 ## Overview
 
-SiteSentinel aims to give developers and small teams a single place to register websites, monitor their health, inspect failures, and eventually automate alerts and audits. It's being built as a backend-focused project demonstrating practical API design, data modeling, authentication, background jobs, testing, and deployment.
+SiteSentinel is a **backend engineering portfolio project** built with Flask.
+It monitors public website health, persists checks and incident transitions,
+audits static HTML for SEO/tracking evidence, and aggregates workspace-scoped
+reports. The project emphasizes real API design, secure network handling,
+authorization, database migrations, test coverage, and engineering tradeoffs.
+
+**Start here:** [5-minute local demo](docs/DEMO.md) ·
+[Architecture and tradeoffs](docs/PORTFOLIO.md) ·
+[Swagger/OpenAPI contract](docs/openapi.json) ·
+[Security limitations](docs/SECURITY_REVIEW.md)
+
+### System architecture (normal application)
+
+```mermaid
+flowchart LR
+    Client["Swagger / REST client"] --> API["Flask API / JWT"]
+    API --> RBAC["Workspace authorization"]
+    RBAC --> DB[("SQLAlchemy / SQL database")]
+    API --> Scanner["IP-pinned HTTP(S) scanner"]
+    API --> Audit["Static HTML auditor"]
+    Scanner --> DB
+    Audit --> DB
+    Worker["Scheduled monitor worker"] <--> DB
+    Worker --> Scanner
+    Worker --> SMTP["Optional SMTP alerts"]
+```
+
+The read-only portfolio showcase is separate from normal operation: it uses
+an **in-memory database with clearly labeled synthetic records**, makes no
+network scans, and accepts no state-changing API requests.
 
 ### Features
 
@@ -46,11 +75,15 @@ In normal operation, scans make real requests to validated public HTTP/HTTPS tar
 
 ## Quick portfolio demo (read-only, no Docker)
 
-Run a **private, loopback-only** copy using an ephemeral in-memory SQLite
-database and preseeded synthetic monitoring data:
+On Windows with Python 3.11 and Git, run a **private, loopback-only** copy
+using an ephemeral in-memory SQLite database and preseeded synthetic monitoring
+data (skip cloning/venv setup if you already installed dependencies):
 
 ~~~powershell
-cd E:\Repo\SiteSentinel
+git clone https://github.com/carinotj19/SiteSentinel.git
+cd SiteSentinel
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m sitesentinel.portfolio_demo
 ~~~
 
@@ -305,9 +338,11 @@ $summary = Invoke-RestMethod "http://127.0.0.1:8000/api/v1/reports/overview?days
 $summary | ConvertTo-Json -Depth 6
 ~~~
 
-**Metrics are measured, not simulated.** An empty history reports null, not
-0%, for check success rate. Check success rate is the portion of stored scans
-marked up, not a time-weighted uptime SLA. Latency averages only include
+**The normal application calculates metrics from stored real checks; the local
+portfolio showcase calculates the same metrics from labeled synthetic samples.**
+An empty history reports null, not 0% or 100%, for check success rate.
+Check success rate is the portion of stored scans marked up, not a
+time-weighted uptime SLA. Latency averages only include
 successful scans with recorded response times. A failed audit is never
 reported as a clean audit. See [API documentation](docs/API.md).
 
@@ -324,7 +359,10 @@ Swagger UI downloads pinned JavaScript/CSS from a third-party CDN; the OpenAPI J
 and Flask backend work offline. The UI's **Authorize** control accepts the access
 JWT returned by login. To test token refresh, authorize separately with the refresh
 JWT; Swagger UI does not automatically rotate tokens. Token persistence is disabled.
-**Use only local/demo credentials** and do not enter real user tokens in shared screenshots.
+**Use only local/demo credentials.** Do not expose bearer tokens in shared
+screenshots, cURL examples, terminal captures, or portfolio materials.
+Swagger's generated **Example Value** is not a server response; use the
+**Server response** section when verifying a request.
 
 The documentation is checked against Flask's registered methods and paths in CI using
 OpenAPI 3.1 validation, so accidental route drift fails the build. Documentation

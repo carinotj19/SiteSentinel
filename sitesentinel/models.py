@@ -146,6 +146,7 @@ class Monitor(db.Model):
     checks = db.relationship("CheckResult", back_populates="monitor", cascade="all, delete-orphan")
     incidents = db.relationship("Incident", back_populates="monitor", cascade="all, delete-orphan")
     alerts = db.relationship("AlertEvent", back_populates="monitor", cascade="all, delete-orphan")
+    audits = db.relationship("SiteAudit", back_populates="monitor", cascade="all, delete-orphan")
 
     def public_dict(self) -> dict:
         return {
@@ -248,3 +249,39 @@ class AlertEvent(db.Model):
             "delivery_status": self.delivery_status, "attempts": self.attempts,
             "delivered_at": _utc_timestamp(self.delivered_at) if self.delivered_at else None,
         }
+
+
+class SiteAudit(db.Model):
+    """Immutable single-page SEO, tracking, and link audit snapshot."""
+
+    __tablename__ = "site_audits"
+    __table_args__ = (db.Index("ix_site_audits_monitor_audited", "monitor_id", "audited_at"),)
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
+    monitor_id = db.Column(db.String(36), db.ForeignKey("monitors.id", ondelete="CASCADE"), nullable=False)
+    audited_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    requested_url = db.Column(db.String(2048), nullable=False)
+    final_url = db.Column(db.String(2048), nullable=True)
+    status = db.Column(db.String(16), nullable=False)
+    status_code = db.Column(db.Integer, nullable=True)
+    link_limit = db.Column(db.Integer, nullable=False)
+    findings = db.Column(db.JSON, nullable=False, default=dict)
+    error = db.Column(db.String(400), nullable=True)
+
+    monitor = db.relationship("Monitor", back_populates="audits")
+
+    def public_dict(self, include_findings: bool = False) -> dict:
+        data = {
+            "id": self.id,
+            "monitor_id": self.monitor_id,
+            "audited_at": _utc_timestamp(self.audited_at),
+            "requested_url": self.requested_url,
+            "final_url": self.final_url,
+            "status": self.status,
+            "status_code": self.status_code,
+            "link_limit": self.link_limit,
+            "error": self.error,
+        }
+        if include_findings:
+            data["findings"] = self.findings
+        return data

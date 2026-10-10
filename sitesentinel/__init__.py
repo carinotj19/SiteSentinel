@@ -38,6 +38,13 @@ def create_app(test_config: dict | None = None) -> Flask:
     from sitesentinel.api.workspaces import bp as workspaces_bp
     app.register_blueprint(workspaces_bp)
 
+    from sitesentinel.api.audits import bp as audits_bp
+    app.register_blueprint(audits_bp)
+    app.register_blueprint(
+        audits_bp, name="workspace_audits",
+        url_prefix="/api/v1/workspaces/<workspace_id>/monitors/<monitor_id>/audits",
+    )
+
     from sitesentinel.monitoring.worker import worker_command
     app.cli.add_command(worker_command)
 

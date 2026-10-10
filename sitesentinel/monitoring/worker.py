@@ -17,7 +17,7 @@ from flask import current_app
 from sqlalchemy import or_, update
 
 from sitesentinel.extensions import db
-from sitesentinel.models import AlertEvent, Monitor, User
+from sitesentinel.models import AlertEvent, Membership, Monitor, User
 from sitesentinel.monitoring.scanner import scan_url
 from sitesentinel.monitoring.service import record_scan
 
@@ -89,9 +89,23 @@ def run_due_checks(limit: int = 10, now: datetime | None = None) -> int:
     return processed
 
 
+class AlertRecipientUnavailable(Exception):
+    """An alert recipient must retain workspace access to receive its details."""
+
+
 def _send_email(event: AlertEvent) -> None:
     config = current_app.config
-    recipient = db.session.get(User, event.monitor.user_id).email
+    monitor = event.monitor
+    creator = db.session.get(User, monitor.user_id)
+    access = db.session.scalar(
+        db.select(Membership.id).where(
+            Membership.user_id == monitor.user_id,
+            Membership.workspace_id == monitor.workspace_id,
+        )
+    )
+    if creator is None or not creator.is_active or access is None:
+        raise AlertRecipientUnavailable("Alert recipient no longer has workspace access.")
+    recipient = creator.email
     subject = ("SiteSentinel: website down" if event.kind == "down"
                else "SiteSentinel: website recovered")
     msg = EmailMessage()
@@ -143,6 +157,13 @@ def dispatch_alerts(limit: int = 10, now: datetime | None = None) -> int:
         event = db.session.get(AlertEvent, event_id)
         try:
             _send_email(event)
+        except AlertRecipientUnavailable:
+            # Do not disclose monitor details to a former teammate or inactive user.
+            # This is permanent until a future recipient-routing feature is built.
+            event.attempts += 1
+            event.delivery_status = "failed"
+            event.next_attempt_at = None
+            event.last_error = "recipient_not_authorized"
         except (OSError, smtplib.SMTPException, ValueError) as exc:
             logger.warning("SMTP delivery failed for alert %s: %s", event_id, type(exc).__name__)
             event.attempts += 1

@@ -1,10 +1,12 @@
 """Owner-scoped monitor CRUD and synchronous development-time checks."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
+from uuid import uuid4
 
 from flask import Blueprint, g, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
+from sqlalchemy import or_, update
 from sqlalchemy.exc import IntegrityError
 
 from sitesentinel.api.common import error_response, json_object
@@ -200,9 +202,64 @@ def run_check(monitor_id: str):
         return error_response("not_found", "Monitor not found.", 404)
     if not monitor.is_enabled:
         return error_response("monitor_disabled", "Enable this monitor before checking.", 409)
-    # Intentionally synchronous for local use; workers will replace it in the next feature.
-    result = scan_url(monitor.url)
+
+    # Use the same lease column as the background worker. Concurrent manual
+    # checks cannot race a worker or attribute an old result to a new URL.
+    requested_url = monitor.url
+    token = str(uuid4())
+    now = datetime.now(timezone.utc)
+    claim = db.session.execute(
+        update(Monitor).where(
+            Monitor.id == monitor.id,
+            Monitor.workspace_id == g.workspace_id,
+            Monitor.is_enabled.is_(True),
+            Monitor.url == requested_url,
+            or_(Monitor.lease_expires_at.is_(None), Monitor.lease_expires_at <= now),
+        ).values(
+            lease_token=token,
+            lease_expires_at=now + timedelta(seconds=120),
+        ).execution_options(synchronize_session=False)
+    )
+    db.session.commit()
+    if not claim.rowcount:
+        return error_response("check_in_progress", "A check is already running for this monitor.", 409)
+
+    try:
+        result = scan_url(requested_url)
+    except Exception:
+        # A scanner bug should not leave a manual lease stuck until expiry.
+        db.session.rollback()
+        db.session.execute(
+            update(Monitor).where(Monitor.id == monitor_id, Monitor.lease_token == token)
+            .values(lease_token=None, lease_expires_at=None)
+        )
+        db.session.commit()
+        return error_response("scan_error", "Website check could not be completed.", 503)
+
+    # Refresh from the database: URL changes/deletion/disable actions revoke
+    # the lease while network I/O is in progress.
+    db.session.expire_all()
+    monitor = _owned_monitor(monitor_id)
+    member = membership_for(g.workspace_id)
+    if member is None or member.role not in MONITOR_WRITERS:
+        db.session.execute(
+            update(Monitor).where(Monitor.id == monitor_id, Monitor.lease_token == token)
+            .values(lease_token=None, lease_expires_at=None)
+        )
+        db.session.commit()
+        if member is None:
+            return error_response("not_found", "Workspace not found.", 404)
+        return error_response("forbidden", "Workspace permissions changed during the check.", 403)
+    if (
+        monitor is None or monitor.lease_token != token
+        or not monitor.is_enabled or monitor.url != requested_url
+    ):
+        db.session.rollback()
+        return error_response("check_changed", "Monitor changed during the check; result discarded.", 409)
+
     check = record_scan(monitor, result)
+    monitor.lease_token = None
+    monitor.lease_expires_at = None
     db.session.commit()
     return jsonify({"check": check.public_dict()}), 201
 

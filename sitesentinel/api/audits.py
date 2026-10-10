@@ -57,10 +57,19 @@ def create_audit(monitor_id: str, workspace_id: str | None = None):
     if isinstance(link_limit, bool) or not isinstance(link_limit, int) or not 0 <= link_limit <= MAX_LINK_LIMIT:
         return error_response("invalid_fields", "link_limit must be an integer between 0 and 10.", 400)
 
-    # On-demand, bounded scanning. Background audit queues are future work.
-    result = audit_site(monitor.url, link_limit=link_limit)
+    # A long-running audit must not survive a URL edit, disable, deletion, or
+    # workspace membership revocation. Reauthorize after the network call.
+    requested_url = monitor.url
+    result = audit_site(requested_url, link_limit=link_limit)
+    db.session.expire_all()
+    monitor, error = _authorized(monitor_id, workspace_id, write=True)
+    if error is not None:
+        return error
+    if not monitor.is_enabled or monitor.url != requested_url:
+        return error_response("audit_changed", "Monitor changed during the audit; result discarded.", 409)
+
     report = SiteAudit(
-        monitor_id=monitor.id, requested_url=monitor.url, final_url=result["final_url"],
+        monitor_id=monitor.id, requested_url=requested_url, final_url=result["final_url"],
         status=result["status"], status_code=result["status_code"], link_limit=link_limit,
         findings=result["findings"], error=result["error"],
     )

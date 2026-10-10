@@ -4,7 +4,7 @@
 
 [![Backend CI](https://github.com/carinotj19/SiteSentinel/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/carinotj19/SiteSentinel/actions/workflows/ci.yml)
 
-> **Project status:** Active development. The Flask foundation, monitoring engine, background worker, and workspace role controls are implemented. Optional SMTP delivery is available; distributed queuing and the UI remain future work. This is a learning/portfolio project, **not** a production monitoring service yet.
+> **Project status:** Active development. The Flask foundation, monitoring engine, background worker, workspace role controls, and initial static site auditing are implemented. Optional SMTP delivery is available; distributed queuing and the UI remain future work. This is a learning/portfolio project, **not** a production monitoring service yet.
 
 ## Overview
 
@@ -25,7 +25,8 @@ SiteSentinel aims to give developers and small teams a single place to register 
 | Database-backed scheduled checks, incidents, and alert events | Implemented |
 | Optional SMTP email delivery and retry | Implemented (configure SMTP) |
 | Workspaces, roles, tenant-scoped monitors, and invitations | Implemented |\n| API keys and ownership transfers | Planned |
-| Broken links, SEO, tracking audits, and dashboards | Planned: site audits |
+| Bounded broken-link, SEO, and static tracking audits | Implemented (on demand) |
+| Dashboard / JavaScript-executing audits | Planned |
 
 Scans make real requests to validated public HTTP/HTTPS targets. No monitoring results or dashboards are simulated.
 
@@ -136,6 +137,8 @@ Invoke-RestMethod http://127.0.0.1:8000/api/v1/users/me -Headers @{Authorization
 | `GET` | `/api/v1/monitors/{id}/checks` | Access token |
 | `GET` | `/api/v1/monitors/{id}/incidents` | Access token |
 | `GET` | `/api/v1/monitors/{id}/alerts` | Access token |
+| `POST`, `GET` | `/api/v1/monitors/{id}/audits` | Access token; writer required for POST |
+| `GET` | `/api/v1/monitors/{id}/audits/{audit_id}` | Access token |
 
 ### Run a website check
 
@@ -218,6 +221,35 @@ Invitation tokens are shown **only once** when created; only their SHA-256 hashe
 
 For request examples and response contracts, see [docs/API.md](docs/API.md). The existing offline incident demonstration remains available through `python -m sitesentinel.monitoring.demo`.
 
+## Static website audits
+
+The initial site audit scans a monitored public webpage for SEO metadata, GA4/GTM/Meta Pixel static
+installation evidence, and up to ten same-origin links (default five). Each audit is
+saved independently from uptime checks and can be retrieved later. **No JavaScript
+executes**, so tags loaded by GTM or consent tools may not appear in these results.
+
+Run with your existing access token and monitor ID in PowerShell:
+
+~~~powershell
+$headers = @{Authorization = "Bearer $($login.access_token)"}
+$id = "<your-monitor-id>"
+$report = Invoke-RestMethod "http://127.0.0.1:8000/api/v1/monitors/$id/audits" -Method POST -Headers $headers -ContentType "application/json" -Body '{"link_limit":5}'
+$report.audit.findings | ConvertTo-Json -Depth 8
+Invoke-RestMethod "http://127.0.0.1:8000/api/v1/monitors/$id/audits" -Headers $headers
+~~~
+
+The personal endpoints above also exist under
+/api/v1/workspaces/{workspace_id}/monitors/{id}/audits for team monitors. Owner, admin,
+and member roles can initiate audits; viewers can read prior reports. Reports
+include title, description, H1, canonical, robots/noindex checks; script
+indicators/IDs; and broken-link checks. Only static HTML is inspected, and a
+missing GA4/GTM/Pixel indicator does not prove the website is untracked.
+
+Audits use pinned public-IP connections, verified HTTPS certificates, safe
+redirects, maximum 256 KiB of HTML, and a maximum ten-link budget. They are
+**synchronous development-time operations**, not full crawls or a production
+security scanner. Read the [API documentation](docs/API.md) for details.
+
 ## Testing and quality
 
 Run locally on Windows from the repository root:
@@ -257,7 +289,8 @@ SiteSentinel/
 - [x] **Background jobs** (`feat/background-jobs`) — Database-polling worker, periodic monitoring, incident tracking, optional SMTP alerts
 - [ ] **Distributed queue** — Celery/Redis and production queue orchestration for higher-scale deployments
 - [x] **Workspaces & permissions** (`feat/workspaces-rbac`) — Organizations, memberships, roles, invitation tokens, and tenant-scoped monitors\n- [ ] **API keys & ownership transfers** — Scoped API credentials and safe ownership transitions
-- [ ] **Site audits & dashboard** (`feat/site-audits`) — Broken links, SEO, tracking scripts, reports
+- [x] **Site audits** (`feat/site-audits`) — Bounded static SEO, tracking-script and broken-link reports
+- [ ] **Dashboard / deeper audits** — UI, JavaScript checks, full-site crawling and queued audit jobs
 
 ## Security and operational notes
 

@@ -6,7 +6,7 @@ import pytest
 
 from sitesentinel.auditing import engine
 from sitesentinel.extensions import db
-from sitesentinel.models import Membership, Monitor, SiteAudit, User
+from sitesentinel.models import Membership, SiteAudit, User
 from sitesentinel.monitoring.scanner import ScanResult, UnsafeTarget
 from tests.conftest import auth_header
 

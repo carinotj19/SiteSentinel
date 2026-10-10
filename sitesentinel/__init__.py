@@ -27,6 +27,10 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(health_bp)
+
+    from sitesentinel.api.docs import bp as api_docs_bp
+
+    app.register_blueprint(api_docs_bp)
     from sitesentinel.api.monitors import bp as monitors_bp
 
     app.register_blueprint(users_bp)

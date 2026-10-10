@@ -284,6 +284,24 @@ successful scans with recorded response times. A failed audit is never
 reported as a clean audit. See [API documentation](docs/API.md).
 
 
+## Interactive API documentation (OpenAPI / Swagger)
+
+Start the Flask development server, then open **http://127.0.0.1:8000/api/docs**.
+Swagger UI shows every implemented authentication, monitor, workspace, audit, and
+reporting endpoint, including personal and team-workspace variants. The underlying
+OpenAPI 3.1 contract is at **http://127.0.0.1:8000/api/openapi.json** and checked in
+as [docs/openapi.json](docs/openapi.json). The contract can be read without a browser.
+
+Swagger UI downloads pinned JavaScript/CSS from a third-party CDN; the OpenAPI JSON
+and Flask backend work offline. The UI's **Authorize** control accepts the access
+JWT returned by login. To test token refresh, authorize separately with the refresh
+JWT; Swagger UI does not automatically rotate tokens. Token persistence is disabled.
+**Use only local/demo credentials** and do not enter real user tokens in shared screenshots.
+
+The documentation is checked against Flask's registered methods and paths in CI using
+OpenAPI 3.1 validation, so accidental route drift fails the build. Documentation
+endpoints themselves are public; the application endpoints retain their JWT/RBAC rules.
+
 ## Testing and quality
 
 Run locally on Windows from the repository root:
@@ -293,7 +311,7 @@ Run locally on Windows from the repository root:
 .\.venv\Scripts\python.exe -m ruff check .
 ```
 
-The API test suite (including workspace isolation and SMTP mocks) uses an isolated SQLite database, so neither Docker nor PostgreSQL is required. GitHub Actions also runs migration checks against PostgreSQL.
+The API test suite (including workspace isolation, SMTP mocks, and OpenAPI route coverage) uses an isolated SQLite database, so neither Docker nor PostgreSQL is required. GitHub Actions also runs migration checks against PostgreSQL.
 
 ## Project structure
 

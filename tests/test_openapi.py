@@ -2,7 +2,7 @@
 
 import re
 
-from openapi_spec_validator import validate_spec
+from openapi_spec_validator import validate
 
 
 def _operations(document):
@@ -35,7 +35,7 @@ def test_openapi_spec_is_valid_and_all_registered_api_methods_are_documented(app
     assert response.mimetype == "application/json"
     contract = response.json
 
-    validate_spec(contract)
+    validate(contract)
     assert contract["openapi"].startswith("3.1.")
     assert _operations(contract) == _route_operations(app)
     # Public routes must not accidentally inherit JWT requirements.

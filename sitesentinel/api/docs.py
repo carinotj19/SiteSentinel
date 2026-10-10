@@ -20,6 +20,15 @@ def openapi_spec():
     return response
 
 
+@bp.get("/swagger-init.js")
+def swagger_init_script():
+    response = send_file(
+        _SPEC_PATH.with_name("swagger-init.js"), mimetype="application/javascript"
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @bp.get("/docs")
 def swagger_ui():
     asset_base = f"https://cdn.jsdelivr.net/npm/swagger-ui-dist@{_SWAGGER_VERSION}"
@@ -30,22 +39,12 @@ def swagger_ui():
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SiteSentinel API Documentation</title>
   <link rel="stylesheet" href="{asset_base}/swagger-ui.css">
-  <style>body {{ margin: 0; background: #fafafa; }}</style>
+
 </head>
 <body>
   <div id="swagger-ui"></div>
   <script src="{asset_base}/swagger-ui-bundle.js"></script>
-  <script>
-    window.onload = () => {{
-      SwaggerUIBundle({{
-        url: "/api/openapi.json",
-        dom_id: "#swagger-ui",
-        deepLinking: true,
-        displayRequestDuration: true,
-        persistAuthorization: false
-      }});
-    }};
-  </script>
+  <script src="/api/swagger-init.js"></script>
 </body>
 </html>
 """
@@ -54,7 +53,7 @@ def swagger_ui():
     response.headers["Content-Security-Policy"] = (
         "default-src 'none'; "
         f"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-        f"script-src 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "script-src 'self' https://cdn.jsdelivr.net; "
         "connect-src 'self'; img-src 'self' data:; font-src 'self' data: https://cdn.jsdelivr.net; "
         "base-uri 'none'; frame-ancestors 'none'"
     )

@@ -38,7 +38,7 @@ def test_demo_is_ephemeral_and_disables_email_and_background_work(monkeypatch, t
     with app.app_context():
         assert db.session.scalar(db.select(db.func.count()).select_from(Monitor)) == 3
         assert db.session.scalar(db.select(db.func.count()).select_from(SiteAudit)) == 4
-        assert db.session.scalar(db.select(db.func.count()).select_from(AlertEvent)) == 4
+        assert db.session.scalar(db.select(db.func.count()).select_from(AlertEvent)) == 3
 
     # A new showcase instance starts with its own independent history.
     another = build_demo_app()

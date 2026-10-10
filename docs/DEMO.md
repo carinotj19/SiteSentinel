@@ -12,10 +12,14 @@ PostgreSQL database. No migrations, Docker, SMTP credentials, or worker are need
 
 1. If you have Flask running already on port 8000, press **Ctrl+C** in its
    PowerShell terminal. Start a new PowerShell window.
-2. From the repository root:
+2. With Git and Python 3.11 installed, clone and run the showcase. If the repo
+   and virtual environment already exist, just run the last command:
 
 ```powershell
-cd E:\Repo\SiteSentinel
+git clone https://github.com/carinotj19/SiteSentinel.git
+cd SiteSentinel
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m sitesentinel.portfolio_demo
 ```
 
@@ -45,6 +49,30 @@ cd E:\Repo\SiteSentinel
      **Demo Agency Workspace** ID to view separate team data
    - /api/v1/workspaces/{workspace_id}/reports/incidents — recently
      resolved blog incident for the team
+
+## Verified sample overview
+
+For the personal workspace, a seven-day report from
+**GET /api/v1/reports/overview?days=7** should include:
+
+| Field | Synthetic result |
+| --- | --- |
+| Monitors | 2 total: 1 up, 1 down |
+| Recorded checks | 10 total: 8 up, 2 failed |
+| Check success percentage | 80% |
+| Average successful response time | 152 ms |
+| Open incidents | 1 |
+| Audits in window | 2 |
+
+This sample was verified locally on October 10, 2026. Workspace UUIDs
+and timestamps change on each run. The percentage reflects recorded check
+samples, not a real duration-weighted uptime SLA.
+
+**Important when taking screenshots:** Use the actual **Server response**,
+not the schema's illustrative **Example Value**, to show execution.
+Never include the cURL Authorization header, access/refresh tokens, or
+credentials from real accounts. Restarting the showcase generates a new signing
+key and invalidates any previous demo access tokens.
 
 The sample data includes healthy checks, consecutive failures, a still-open
 incident, a recovered incident, queued alerts, and completed/failed audit

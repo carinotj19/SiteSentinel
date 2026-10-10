@@ -85,3 +85,48 @@ def test_api_spec_models_token_rotation_roles_scans_and_static_audit(client):
     assert (link_limit["minimum"], link_limit["maximum"]) == (0, 10)
     assert "refresh" in spec["paths"]["/api/v1/auth/refresh"]["post"]["description"].lower()
     assert "duration-weighted" in spec["info"]["description"]
+
+
+def test_overview_swagger_examples_show_realistic_metrics_not_false_100_percent(client):
+    """Both examples are illustrative, but their counts and no-data behavior are honest."""
+    spec = client.get("/api/openapi.json").json
+    for route in (
+        "/api/v1/reports/overview",
+        "/api/v1/workspaces/{workspace_id}/reports/overview",
+    ):
+        examples = spec["paths"][route]["get"]["responses"]["200"]["content"][
+            "application/json"
+        ]["examples"]
+        assert examples
+        assert any(
+            "synthetic" in (entry.get("summary", "") + entry.get("description", "")).lower()
+            for entry in examples.values()
+        )
+        for entry in examples.values():
+            report = entry["value"]
+            checks = report["checks"]
+            monitors = report["monitors"]
+            assert checks["up"] + checks["failed_or_blocked"] == checks["total"]
+            assert monitors["enabled"] + monitors["disabled"] == monitors["total"]
+            assert sum(monitors["last_status"].values()) == monitors["total"]
+            assert set(spec["components"]["schemas"]["Overview"]["required"]) <= set(report)
+            if checks["total"] == 0:
+                assert checks["success_percentage"] is None
+                assert checks["average_success_response_time_ms"] is None
+            else:
+                expected = round(checks["up"] * 100 / checks["total"], 2)
+                assert checks["success_percentage"] == expected
+            assert "not a duration-weighted" in report["note"]
+            assert "Authorization" not in str(entry)
+            assert "access_token" not in str(entry)
+
+    personal_examples = spec["paths"]["/api/v1/reports/overview"]["get"][
+        "responses"
+    ]["200"]["content"]["application/json"]["examples"]
+    sample = personal_examples["localPortfolioDemo"]["value"]
+    assert sample["monitors"]["total"] == 2
+    assert sample["checks"]["total"] == 10
+    assert sample["checks"]["success_percentage"] == 80
+    assert sample["checks"]["average_success_response_time_ms"] == 152
+    assert sample["open_incidents"] == 1
+    assert sample["audits_in_window"] == 2

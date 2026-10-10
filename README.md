@@ -24,9 +24,11 @@ SiteSentinel aims to give developers and small teams a single place to register 
 | User-owned monitors and persisted check history | Implemented |
 | Database-backed scheduled checks, incidents, and alert events | Implemented |
 | Optional SMTP email delivery and retry | Implemented (configure SMTP) |
-| Workspaces, roles, tenant-scoped monitors, and invitations | Implemented |\n| API keys and ownership transfers | Planned |
+| Workspaces, roles, tenant-scoped monitors, and invitations | Implemented |
+| API keys and ownership transfers | Planned |
 | Bounded broken-link, SEO, and static tracking audits | Implemented (on demand) |
-| Dashboard / JavaScript-executing audits | Planned |
+| Read-only dashboard reporting APIs | Implemented |
+| Frontend dashboard / JavaScript-executing audits | Planned |
 
 Scans make real requests to validated public HTTP/HTTPS targets. No monitoring results or dashboards are simulated.
 
@@ -250,6 +252,38 @@ redirects, maximum 256 KiB of HTML, and a maximum ten-link budget. They are
 **synchronous development-time operations**, not full crawls or a production
 security scanner. Read the [API documentation](docs/API.md) for details.
 
+## Reporting APIs (backend dashboard)
+
+All reports read your **persisted scan and audit history**; reporting does not
+trigger website requests. Each report is JWT-authenticated and scoped to
+your personal workspace or a team workspace that you belong to.
+
+| Route | Purpose |
+| --- | --- |
+| GET /api/v1/reports/overview | Current monitor statuses, check success rate, latency, open incidents |
+| GET /api/v1/reports/response-times | Daily successful response-time trends |
+| GET /api/v1/reports/incidents | Ongoing incidents and recent recoveries |
+| GET /api/v1/reports/audit-highlights | Recent SEO, broken-link and tracking findings |
+
+Team variants are located under /api/v1/workspaces/{workspace_id}/reports.
+All four endpoints accept days=1–90 (default 7); the three list endpoints
+also support limit=1–100 (default 50).
+
+Example from PowerShell, using an existing valid access token:
+
+~~~powershell
+$headers = @{ Authorization = "Bearer $($login.access_token)" }
+$summary = Invoke-RestMethod "http://127.0.0.1:8000/api/v1/reports/overview?days=7" -Headers $headers
+$summary | ConvertTo-Json -Depth 6
+~~~
+
+**Metrics are measured, not simulated.** An empty history reports null, not
+0%, for check success rate. Check success rate is the portion of stored scans
+marked up, not a time-weighted uptime SLA. Latency averages only include
+successful scans with recorded response times. A failed audit is never
+reported as a clean audit. See [API documentation](docs/API.md).
+
+
 ## Testing and quality
 
 Run locally on Windows from the repository root:
@@ -288,9 +322,11 @@ SiteSentinel/
 - [x] **Monitoring engine** (`feat/monitoring-engine`) — Secure website management, uptime/SSL checks, historical results
 - [x] **Background jobs** (`feat/background-jobs`) — Database-polling worker, periodic monitoring, incident tracking, optional SMTP alerts
 - [ ] **Distributed queue** — Celery/Redis and production queue orchestration for higher-scale deployments
-- [x] **Workspaces & permissions** (`feat/workspaces-rbac`) — Organizations, memberships, roles, invitation tokens, and tenant-scoped monitors\n- [ ] **API keys & ownership transfers** — Scoped API credentials and safe ownership transitions
+- [x] **Workspaces & permissions** (`feat/workspaces-rbac`) — Organizations, memberships, roles, invitation tokens, and tenant-scoped monitors
+- [ ] **API keys & ownership transfers** — Scoped API credentials and safe ownership transitions
 - [x] **Site audits** (`feat/site-audits`) — Bounded static SEO, tracking-script and broken-link reports
-- [ ] **Dashboard / deeper audits** — UI, JavaScript checks, full-site crawling and queued audit jobs
+- [x] **Dashboard reporting** (`feat/dashboard-reporting`) — Scoped summaries, trends, incidents, audit highlights
+- [ ] **Frontend dashboard / deeper audits** — UI, JavaScript checks, full-site crawling and queued audit jobs
 
 ## Security and operational notes
 

@@ -4032,6 +4032,72 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Overview"
+                },
+                "examples": {
+                  "localPortfolioDemo": {
+                    "summary": "Local portfolio demo — illustrative synthetic snapshot",
+                    "description": "Sample identifiers and dates are illustrative; actual in-memory data uses newly generated UUIDs/timestamps each run.",
+                    "value": {
+                      "workspace_id": "00000000-0000-4000-8000-000000000001",
+                      "window": {
+                        "days": 7,
+                        "since": "2026-10-03T08:43:00+00:00"
+                      },
+                      "monitors": {
+                        "total": 2,
+                        "enabled": 2,
+                        "disabled": 0,
+                        "last_status": {
+                          "up": 1,
+                          "down": 1,
+                          "blocked": 0,
+                          "unknown": 0
+                        }
+                      },
+                      "checks": {
+                        "total": 10,
+                        "up": 8,
+                        "failed_or_blocked": 2,
+                        "success_percentage": 80,
+                        "average_success_response_time_ms": 152
+                      },
+                      "open_incidents": 1,
+                      "audits_in_window": 2,
+                      "note": "Check success_percentage is the fraction of recorded up checks within the window, not a duration-weighted uptime guarantee."
+                    }
+                  },
+                  "emptyHistory": {
+                    "summary": "Workspace without monitors or check history",
+                    "description": "No recorded checks means a null success percentage, not 0% or 100%.",
+                    "value": {
+                      "workspace_id": "00000000-0000-4000-8000-000000000002",
+                      "window": {
+                        "days": 7,
+                        "since": "2026-10-03T08:43:00+00:00"
+                      },
+                      "monitors": {
+                        "total": 0,
+                        "enabled": 0,
+                        "disabled": 0,
+                        "last_status": {
+                          "up": 0,
+                          "down": 0,
+                          "blocked": 0,
+                          "unknown": 0
+                        }
+                      },
+                      "checks": {
+                        "total": 0,
+                        "up": 0,
+                        "failed_or_blocked": 0,
+                        "success_percentage": null,
+                        "average_success_response_time_ms": null
+                      },
+                      "open_incidents": 0,
+                      "audits_in_window": 0,
+                      "note": "Check success_percentage is the fraction of recorded up checks within the window, not a duration-weighted uptime guarantee."
+                    }
+                  }
                 }
               }
             }
@@ -4452,6 +4518,71 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Overview"
+                },
+                "examples": {
+                  "demoAgencyWorkspace": {
+                    "summary": "Synthetic recovered-site team workspace",
+                    "description": "Illustrative in-memory sample; workspace IDs and timestamps vary by demo run.",
+                    "value": {
+                      "workspace_id": "00000000-0000-4000-8000-000000000003",
+                      "window": {
+                        "days": 7,
+                        "since": "2026-10-03T08:43:00+00:00"
+                      },
+                      "monitors": {
+                        "total": 1,
+                        "enabled": 1,
+                        "disabled": 0,
+                        "last_status": {
+                          "up": 1,
+                          "down": 0,
+                          "blocked": 0,
+                          "unknown": 0
+                        }
+                      },
+                      "checks": {
+                        "total": 4,
+                        "up": 2,
+                        "failed_or_blocked": 2,
+                        "success_percentage": 50,
+                        "average_success_response_time_ms": 171
+                      },
+                      "open_incidents": 0,
+                      "audits_in_window": 2,
+                      "note": "Check success_percentage is the fraction of recorded up checks within the window, not a duration-weighted uptime guarantee."
+                    }
+                  },
+                  "emptyHistory": {
+                    "summary": "Workspace without monitors or check history",
+                    "value": {
+                      "workspace_id": "00000000-0000-4000-8000-000000000002",
+                      "window": {
+                        "days": 7,
+                        "since": "2026-10-03T08:43:00+00:00"
+                      },
+                      "monitors": {
+                        "total": 0,
+                        "enabled": 0,
+                        "disabled": 0,
+                        "last_status": {
+                          "up": 0,
+                          "down": 0,
+                          "blocked": 0,
+                          "unknown": 0
+                        }
+                      },
+                      "checks": {
+                        "total": 0,
+                        "up": 0,
+                        "failed_or_blocked": 0,
+                        "success_percentage": null,
+                        "average_success_response_time_ms": null
+                      },
+                      "open_incidents": 0,
+                      "audits_in_window": 0,
+                      "note": "Check success_percentage is the fraction of recorded up checks within the window, not a duration-weighted uptime guarantee."
+                    }
+                  }
                 }
               }
             }
